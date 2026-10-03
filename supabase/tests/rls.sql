@@ -95,6 +95,10 @@ select pg_temp.fails($$insert into public.rounds (course_id, tee_time) values ('
 select pg_temp.fails($$insert into public.rounds (user_id, course_id, tee_time) values ('00000000-0000-0000-0000-00000000000c', 'redhawk', now())$$,
   'cannot start a round as someone else');
 update public.rounds set hole = 7, hole_started_at = now();
+select pg_temp.ok((select mode = 'riding' from public.rounds), 'mode defaults to riding');
+update public.rounds set mode = 'walking';
+select pg_temp.ok((select mode = 'walking' from public.rounds), 'owner can switch to walking mid-round');
+select pg_temp.fails($$update public.rounds set mode = 'jogging'$$, 'mode must be walking or riding');
 reset role;
 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
@@ -103,6 +107,9 @@ select pg_temp.ok((select count(*) = 1 from public.rounds where hole = 7), 'frie
 select pg_temp.ok((select last_lat is not null from public.rounds), 'friend sees live position');
 update public.rounds set hole = 18;
 select pg_temp.ok((select hole = 7 from public.rounds), 'friend cannot move A''s round');
+select pg_temp.ok((select mode = 'walking' from public.rounds), 'friend sees A is walking');
+update public.rounds set mode = 'riding';
+select pg_temp.ok((select mode = 'walking' from public.rounds), 'friend cannot change A''s mode');
 delete from public.rounds;
 reset role;
 select pg_temp.ok((select count(*) = 1 from public.rounds), 'friend cannot delete A''s round');

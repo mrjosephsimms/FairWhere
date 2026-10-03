@@ -205,6 +205,13 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .confirm { background: #fff4e5; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .code { font: 600 34px/1.1 var(--mono); letter-spacing: .2em; }
 
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: #eef0ec; }
+.segmented button { display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 11px; padding: 10px;
+  background: none; font-weight: 600; font-size: 16px; color: var(--muted); cursor: pointer; }
+.segmented button[aria-checked="true"] { background: #fff; color: var(--accent); box-shadow: 0 1px 4px rgba(16, 24, 18, .12); }
+.mode-tag, .mode-line { display: inline-flex; align-items: center; gap: 6px; }
+.mode-tag { font-weight: 600; color: var(--accent); }
+
 /* ------------------------------------------------------------- sign in */
 .splash { display: flex; align-items: flex-end; justify-content: center; }
 .splash > .card, .splash .signin {

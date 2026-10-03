@@ -28,6 +28,8 @@ export function roundInfo(round: Round, course: CourseData | undefined, now: num
       holeFraction: round.hole_fraction,
       status: round.status,
       finishedAt: round.finished_at ? Date.parse(round.finished_at) : null,
+      mode: round.mode,
+      yards: seq.map((h) => h.yards),
     },
     now,
   );

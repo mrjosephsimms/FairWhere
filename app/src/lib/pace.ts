@@ -6,10 +6,44 @@
 export const PAR_WEIGHT: Record<number, number> = { 3: 0.78, 4: 1.0, 5: 1.22 };
 const weight = (par: number) => PAR_WEIGHT[par] ?? (par > 5 ? 1.44 : 1.0);
 
-/** Split a target round time (minutes) across holes by par weight. */
-export function allocate(pars: number[], targetMinutes: number): number[] {
-  const total = pars.reduce((s, p) => s + weight(p), 0);
-  return pars.map((p) => (targetMinutes * weight(p)) / total);
+export type Mode = "walking" | "riding";
+
+/** Default usual round length (minutes): walkers typically take 20-30 min longer than a cart. */
+export const DEFAULT_TARGET: Record<Mode, number> = { riding: 240, walking: 270 };
+
+/**
+ * Rescale a usual-pace target when the golfer switches mode mid-round
+ * (e.g. 4:00 riding -> 4:30 walking), kept within the DB's 120..420 range.
+ */
+export function switchTarget(targetMinutes: number, from: Mode, to: Mode): number {
+  const t = Math.round((targetMinutes * DEFAULT_TARGET[to]) / DEFAULT_TARGET[from]);
+  return Math.min(Math.max(t, 120), 420);
+}
+
+/** Share of a walker's hole time that scales with the hole's length rather than its par. */
+const WALK_YARDS_SHARE = 0.35;
+
+/**
+ * Split a target round time (minutes) across holes. Riding: by par weight (the cart
+ * makes distance cheap). Walking: part par weight, part yardage, since a long hole
+ * takes noticeably longer on foot. Holes with unknown yardage fall back to par weight.
+ */
+export function allocate(pars: number[], targetMinutes: number, opts: { mode?: Mode; yards?: (number | null)[] } = {}): number[] {
+  let w = pars.map(weight);
+  const yards = opts.yards;
+  if (opts.mode === "walking" && yards && yards.length === pars.length) {
+    const known = yards.filter((y): y is number => y != null && y > 0);
+    if (known.length) {
+      const avgYards = known.reduce((s, y) => s + y, 0) / known.length;
+      const avgW = w.reduce((s, x) => s + x, 0) / w.length;
+      w = w.map((x, i) => {
+        const y = yards[i];
+        return y != null && y > 0 ? (1 - WALK_YARDS_SHARE) * x + WALK_YARDS_SHARE * avgW * (y / avgYards) : x;
+      });
+    }
+  }
+  const total = w.reduce((s, x) => s + x, 0);
+  return w.map((x) => (targetMinutes * x) / total);
 }
 
 export interface PaceInput {
@@ -26,6 +60,10 @@ export interface PaceInput {
   holeFraction?: number | null;
   status: "live" | "done" | "cancelled";
   finishedAt?: number | null;
+  /** Walking splits the round partly by yardage; default riding. */
+  mode?: Mode;
+  /** Yards of each hole in play order, when known. */
+  yards?: (number | null)[];
 }
 
 export interface PaceEstimate {
@@ -38,7 +76,7 @@ export interface PaceEstimate {
 }
 
 export function estimate(round: PaceInput, now: number): PaceEstimate {
-  const a = allocate(round.pars, round.targetMinutes || 255);
+  const a = allocate(round.pars, round.targetMinutes || 255, { mode: round.mode, yards: round.yards });
   const total = a.reduce((x, y) => x + y, 0);
   const tee = round.teeTime;
 
