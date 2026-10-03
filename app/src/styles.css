@@ -154,11 +154,16 @@ h1 span { color: var(--flag); }
 .pill.good { color: var(--good); background: var(--accent-soft); } .pill.warn { color: var(--warn); background: #fbf0dc; }
 .pill.bad { color: var(--bad); background: #fde4e4; } .pill.idle { color: var(--muted); }
 
-.strip { display: grid; grid-template-columns: repeat(18, 1fr); gap: 3px; }
-.strip i { height: 24px; border-radius: 6px; background: #e7ebe6; font: 600 10px var(--body); font-style: normal; display: grid; place-items: center; color: var(--muted); }
+.nine { display: flex; flex-direction: column; gap: 8px; }
+.nine-switch { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 99px; background: #eef0ec; }
+.nine-switch button { position: relative; border: 0; background: none; border-radius: 99px; padding: 4px 12px; font-size: 12px; font-weight: 700;
+  letter-spacing: .02em; color: var(--muted); cursor: pointer; }
+.nine-switch button[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(16, 24, 18, .12); }
+.nine-dot { position: absolute; top: 3px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--flag); }
+.strip { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+.strip i { height: 30px; border-radius: 99px; background: #e7ebe6; font: 700 12px var(--body); font-style: normal; display: grid; place-items: center; color: var(--muted); }
 .strip i.done { background: var(--accent); color: #fff; }
-.strip i.now { background: var(--flag); color: #fff; }
-.strip i.turn { margin-left: 4px; }
+.strip i.now { background: var(--flag); color: #fff; box-shadow: 0 0 0 3px rgba(229, 72, 77, .2); }
 @media (prefers-reduced-motion: no-preference) { .strip i.now { animation: pulse 2s ease-in-out infinite; } }
 
 form { display: flex; flex-direction: column; gap: 12px; margin: 0; }

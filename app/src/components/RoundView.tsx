@@ -1,4 +1,5 @@
-// Shared round visuals: pace chip, 18-hole scorecard strip, stop confirmation.
+// Shared round visuals: pace chip, front/back nine hole strip, stop confirmation.
+import { useEffect, useState } from "react";
 import { paceChip, type PaceEstimate } from "../lib/pace";
 import type { Round } from "../lib/db";
 
@@ -7,20 +8,31 @@ export function PaceChip({ est }: { est: PaceEstimate }) {
   return <span className={`pill ${c.tone}`}>{c.label}</span>;
 }
 
+/** Nine pills at a time: the nine they're on, with a Front 9 / Back 9 switch to peek at the other. */
 export function HoleStrip({ round, now }: { round: Round; now: number }) {
   const done = round.status !== "live";
   const started = now >= Date.parse(round.tee_time);
+  const onBack = done || round.hole > 9;
+  const [back, setBack] = useState(onBack);
+  useEffect(() => setBack(onBack), [onBack]); // follow them through the turn
+  const first = back ? 10 : 1;
   return (
-    <div className="strip" aria-label={done ? "Round finished" : `Hole ${round.hole} of 18`}>
-      {Array.from({ length: 18 }, (_, i) => {
-        const n = i + 1;
-        const cls = done || n < round.hole ? "done" : n === round.hole && started ? "now" : "";
-        return (
-          <i key={n} className={`${cls}${n === 10 ? " turn" : ""}`}>
-            {n}
-          </i>
-        );
-      })}
+    <div className="nine">
+      <div className="nine-switch" role="tablist" aria-label="Which nine">
+        {[false, true].map((b) => (
+          <button key={String(b)} role="tab" aria-selected={back === b} onClick={() => setBack(b)}>
+            {b ? "Back 9" : "Front 9"}
+            {b === onBack && !done && <i className="nine-dot" aria-hidden />}
+          </button>
+        ))}
+      </div>
+      <div className="strip" aria-label={done ? "Round finished" : `Hole ${round.hole} of 18`}>
+        {Array.from({ length: 9 }, (_, i) => {
+          const n = first + i;
+          const cls = done || n < round.hole ? "done" : n === round.hole && started ? "now" : "";
+          return <i key={n} className={cls}>{n}</i>;
+        })}
+      </div>
     </div>
   );
 }
