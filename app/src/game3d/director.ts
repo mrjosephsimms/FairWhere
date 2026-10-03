@@ -1,14 +1,15 @@
-// Runs the 3D show: render loop, camera moves, ball flight/bounce/roll, golfer
-// animation, confetti. The rules live in lib/game.ts; the React screen
-// (HoleGame.tsx) tells the director what happened and it animates it.
+// Runs the 3D show: render loop, camera moves, ball flight/bounce/roll, the golfer's
+// walk to the ball, swing animation, splash, confetti. The rules live in lib/game.ts;
+// the React screen (HoleGame.tsx) tells the director what happened and it animates it.
 import * as THREE from "three";
-import type { GameHole, Shot, XY } from "../lib/game";
-import { buildWorld, toV3, toon, type World } from "./world";
+import { MAX_MISS_DEG, type Club, type GameHole, type Shot, type XY } from "../lib/game";
+import { buildWorld, paint, toV3, type World } from "./world";
 import { IMPACT, makeGolfer, type Golfer, type Move } from "./golfer";
 import { sfx } from "./sfx";
 
-const BALL_R = 0.2; // cartoon-sized so you can actually see it
+const BALL_R = 0.15; // a touch bigger than real so you can follow it
 const TRAIL_MAX = 70;
+const WALK_SPEED = 7; // m/s: a brisk cartoon walk
 const up = new THREE.Vector3(0, 1, 0);
 const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
@@ -20,25 +21,35 @@ interface Flight {
   apex: number;
   dur: number;
   t: number;
-  lost: boolean;
+  result: Shot["result"];
   holed: boolean;
   landed: boolean;
   onEnd: () => void;
 }
 
-type Cam = "intro" | "address" | "follow" | "celebrate";
+interface Walk {
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  yaw: number;
+  endYaw: number;
+  dur: number;
+  t: number;
+  done: () => void;
+}
+
+type Cam = "intro" | "address" | "follow" | "walk" | "celebrate";
 
 export class Director {
   private renderer: THREE.WebGLRenderer;
-  private camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2500);
+  private camera = new THREE.PerspectiveCamera(52, 1, 0.1, 3000);
   private world: World;
   private golfer: Golfer;
-  private ball = new THREE.Group();
-  private ballShadow: THREE.Mesh;
+  private ball: THREE.Mesh;
   private trail: THREE.Line;
   private trailPts: THREE.Vector3[] = [];
   /** Fixed buffer, filled in place: growing a geometry each frame makes three.js warn. */
   private trailBuf = new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 3), 3);
+  private aimLine: THREE.Line;
   private poof: THREE.Mesh;
   private confetti: THREE.InstancedMesh;
   private bits: { p: THREE.Vector3; v: THREE.Vector3; r: THREE.Euler; s: number }[] = [];
@@ -50,40 +61,43 @@ export class Director {
   private cam: Cam = "intro";
   private camT = 0;
   private dir = new THREE.Vector3(1, 0, 0);
+  private aimAt = new THREE.Vector3();
   private putting = false;
   private flight: Flight | null = null;
+  private walk: Walk | null = null;
   private pendingShot: (() => void) | null = null;
   private lookAt = new THREE.Vector3();
   private introFrom = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
   private timers: { at: number; fn: () => void }[] = [];
   private poofT = -1;
-  private ringScale = 1;
   private introDone: (() => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, hole: GameHole, shirt: string) {
     // preserveDrawingBuffer lets screenshots (and the dev preview) capture frames.
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
     this.world = buildWorld(hole);
     this.golfer = makeGolfer(shirt);
     this.world.scene.add(this.golfer.root);
 
-    const ballGeo = new THREE.SphereGeometry(BALL_R, 20, 14);
-    const shell = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0x1f2a22, side: THREE.BackSide }));
-    shell.scale.setScalar(1.12);
-    this.ball.add(new THREE.Mesh(ballGeo, toon("#ffffff")), shell);
-    this.ballShadow = new THREE.Mesh(new THREE.CircleGeometry(BALL_R * 1.2, 16), new THREE.MeshBasicMaterial({ color: 0x0b2a12, transparent: true, opacity: 0.3, depthWrite: false }));
-    this.ballShadow.rotation.x = -Math.PI / 2;
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 20, 14), paint("#ffffff", 0.35));
+    this.ball.castShadow = true;
     const trailGeo = new THREE.BufferGeometry();
     trailGeo.setAttribute("position", this.trailBuf);
     trailGeo.setDrawRange(0, 0);
-    this.trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }));
+    this.trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
     this.trail.frustumCulled = false;
-    this.poof = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
+    this.aimLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.9, gapSize: 0.7, transparent: true, opacity: 0.9 }));
+    this.aimLine.frustumCulled = false;
+    this.poof = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
     this.confetti = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.25, 0.12), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), 140);
     this.confetti.count = 0;
     this.confetti.frustumCulled = false; // its bounds were computed while empty at the origin
-    this.world.scene.add(this.ball, this.ballShadow, this.trail, this.poof, this.confetti);
+    this.world.scene.add(this.ball, this.trail, this.aimLine, this.poof, this.confetti);
 
     // Intro starts high over the green, looking back down the hole.
     const cup = this.world.cup, tee = toV3(hole.line[0]);
@@ -130,6 +144,8 @@ export class Director {
     this.timers.push({ at: this.clock + sec, fn });
   }
 
+  // ------------------------------------------------------------------ intro
+
   /** Fly in from over the green to the golfer on the tee. Tapping skips it (skipIntro). */
   intro(done: () => void) {
     this.cam = "intro";
@@ -156,22 +172,13 @@ export class Director {
     done();
   }
 
-  /** Put the ball and golfer at `ball`, aimed at `aim`. `cut` snaps the camera. */
-  setUp(ballXY: XY, aimXY: XY, putting: boolean, cut: boolean) {
-    this.putting = putting;
-    const b = this.onGround(ballXY);
-    this.ball.position.copy(b);
-    this.ball.visible = true;
-    this.dir.copy(toV3(aimXY).sub(toV3(ballXY)).setY(0).normalize());
-    this.golfer.stand(b.clone().setY(this.ground(b)), this.dir);
-    this.golfer.root.position.y = this.world.heightAt([this.golfer.root.position.x, -this.golfer.root.position.z]);
-    const ringAt = putting ? this.world.cup.clone() : this.onGround(aimXY, 0.15);
-    this.world.aimRing.position.copy(ringAt).setY(ringAt.y + (putting ? 0.02 : 0));
-    this.world.aimRing.visible = true;
-    this.world.flagstick.visible = !putting;
-    this.ringScale = putting ? 0.32 : 1;
-    this.trailPts = [];
-    this.trail.geometry.setDrawRange(0, 0);
+  // ------------------------------------------------------------------ set-up and walking
+
+  /** Put the ball at `ball` aimed at `aim`, golfer at address with `club`. `cut` snaps the camera. */
+  setUp(ballXY: XY, aimXY: XY, putting: boolean, club: Club["kind"], cut: boolean) {
+    this.place(ballXY, aimXY, putting, club);
+    this.golfer.stand(this.ball.position.clone().setY(this.ground(this.ball.position)), this.dir);
+    this.golfer.root.position.y = this.ground(this.golfer.root.position);
     this.setMove("idle");
     if (this.cam !== "intro") this.cam = "address";
     if (cut) {
@@ -182,31 +189,105 @@ export class Director {
   }
 
   /**
-   * Behind the ball on the target line, nudged away from the golfer so they stand
-   * left of centre, and aimed low enough that the ball sits above the swing meter.
+   * Walk the golfer from where they are to the ball, then settle at address.
+   * `headStart` (metres): long walks start this far from the ball (after a quick cut).
    */
+  walkTo(ballXY: XY, aimXY: XY, putting: boolean, club: Club["kind"], headStart: number | null, done: () => void) {
+    this.place(ballXY, aimXY, putting, club);
+    this.aimLine.visible = false;
+    this.world.aimRing.visible = false;
+    const stance = this.golfer.stance(this.ball.position.clone().setY(this.ground(this.ball.position)), this.dir);
+    const from = this.golfer.root.position.clone();
+    if (headStart != null && from.distanceTo(stance.pos) > headStart) {
+      from.copy(stance.pos).addScaledVector(from.clone().sub(stance.pos).setY(0).normalize(), headStart);
+      from.y = this.ground(from);
+      this.golfer.root.position.copy(from);
+    }
+    const d = from.distanceTo(stance.pos);
+    const path = stance.pos.clone().sub(from);
+    this.walk = {
+      from, to: stance.pos, dur: Math.max(0.6, d / WALK_SPEED), t: 0,
+      yaw: Math.atan2(path.x, path.z), endYaw: stance.yaw,
+      done: () => {
+        this.world.aimRing.visible = true;
+        this.aimLine.visible = !putting;
+        this.cam = "address";
+        done();
+      },
+    };
+    this.golfer.root.rotation.y = this.walk.yaw;
+    this.setMove("walk");
+    this.cam = "walk";
+  }
+
+  /** How far the golfer is from where they'd stand for the next shot. */
+  walkDistance(ballXY: XY, aimXY: XY) {
+    const b = this.onGround(ballXY);
+    const dir = toV3(aimXY).sub(toV3(ballXY)).setY(0).normalize();
+    return this.golfer.root.position.distanceTo(this.golfer.stance(b, dir).pos);
+  }
+
+  private place(ballXY: XY, aimXY: XY, putting: boolean, club: Club["kind"]) {
+    this.putting = putting;
+    const b = this.onGround(ballXY);
+    this.ball.position.copy(b);
+    this.ball.visible = true;
+    this.dir.copy(toV3(aimXY).sub(toV3(ballXY)).setY(0).normalize());
+    this.aimAt.copy(putting ? this.world.cup : this.onGround(aimXY, 0.15));
+    this.golfer.setClub(club);
+    this.previewAim(0);
+    this.world.aimRing.visible = true;
+    this.aimLine.visible = !putting;
+    this.trailPts = [];
+    this.trail.geometry.setDrawRange(0, 0);
+  }
+
+  /** While the direction meter sweeps: swing the aim line and ring left/right (aim: -1..1). */
+  previewAim(aim: number) {
+    const b = this.ball.position;
+    const rel = this.aimAt.clone().sub(b).setY(0);
+    rel.applyAxisAngle(up, (-aim * MAX_MISS_DEG * Math.PI) / 180);
+    const target = b.clone().add(rel);
+    target.y = this.ground(target) + 0.12;
+    this.world.aimRing.position.copy(target);
+    if (this.putting) return;
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 24; i++) {
+      const k = i / 24;
+      const p = b.clone().lerp(target, k);
+      p.y = this.ground(p) + 0.12 + Math.sin(Math.PI * k) * Math.min(rel.length() * 0.06, 6); // a hint of the arc
+      pts.push(p);
+    }
+    this.aimLine.geometry.setFromPoints(pts);
+    this.aimLine.computeLineDistances();
+  }
+
   private addressShot() {
     const b = this.ball.position;
-    const back = this.putting ? 7 : 9, high = this.putting ? 3.4 : 3.8;
-    const awayFromGolfer = new THREE.Vector3(-this.dir.z, 0, this.dir.x).multiplyScalar(this.putting ? 1.4 : 1.1);
+    const back = this.putting ? 7 : 9, high = this.putting ? 3.4 : 3.6;
+    // Nudged a little away from the golfer so they stand just left of centre, clear of the power bar.
+    const awayFromGolfer = new THREE.Vector3(-this.dir.z, 0, this.dir.x).multiplyScalar(this.putting ? 1.0 : 0.55);
     const pos = b.clone().addScaledVector(this.dir, -back).add(awayFromGolfer).add(new THREE.Vector3(0, high, 0));
     const look = this.putting
       ? b.clone().lerp(this.world.cup, 0.5).add(new THREE.Vector3(0, -0.6, 0))
-      : b.clone().addScaledVector(this.dir, 12).add(new THREE.Vector3(0, -0.5, 0));
+      : b.clone().addScaledVector(this.dir, 14).add(new THREE.Vector3(0, -0.2, 0));
     return { pos, look };
   }
+
+  // ------------------------------------------------------------------ shots
 
   /** Swing (or putt); the ball leaves at impact and `landed` fires when it comes to rest. */
   shoot(shot: Shot, holed: boolean, landed: () => void) {
     const putt = this.putting;
     this.world.aimRing.visible = false;
+    this.aimLine.visible = false;
     this.setMove(putt ? "putt" : "swing");
     if (!putt) this.after(0.45, () => sfx.whoosh());
     const from = this.ball.position.clone();
-    const lost = shot.result === "lost";
     const to = this.onGround(shot.to);
     const dist = from.distanceTo(to);
-    const land = putt || lost ? to.clone() : from.clone().lerp(to, dist > 60 ? 0.86 : 0.78);
+    const stops = shot.result === "lost" || shot.result === "water" || putt;
+    const land = stops ? to.clone() : from.clone().lerp(to, dist > 60 ? 0.86 : 0.78);
     land.y = this.ground(land) + BALL_R;
     this.pendingShot = () => {
       putt ? sfx.putt() : sfx.hit();
@@ -215,7 +296,7 @@ export class Director {
         from, land, to,
         apex: putt ? 0 : Math.min(Math.max(dist * 0.17, 4), 34),
         dur: putt ? 0.8 + dist * 0.09 : 1.0 + dist / 140,
-        t: 0, lost, holed, landed: false,
+        t: 0, result: shot.result, holed, landed: false,
         onEnd: landed,
       };
       if (!putt) this.cam = "follow";
@@ -249,12 +330,14 @@ export class Director {
     this.moveT = 0;
   }
 
+  // ------------------------------------------------------------------ frame
+
   private tick(dt: number) {
     this.clock += dt;
     this.moveT += dt;
     this.camT += dt;
     this.world.update(this.clock);
-    this.world.aimRing.scale.multiplyScalar(this.ringScale);
+    if (this.putting) this.world.aimRing.scale.multiplyScalar(0.3);
     for (const t of this.timers.filter((x) => x.at <= this.clock)) t.fn();
     this.timers = this.timers.filter((x) => x.at > this.clock);
 
@@ -264,6 +347,7 @@ export class Director {
     }
     if ((this.move === "swing" && this.moveT > IMPACT.swing + 0.9) || (this.move === "putt" && this.moveT > IMPACT.putt + 0.8)) this.setMove("idle");
 
+    this.stepWalk(dt);
     this.stepFlight(dt);
     this.stepConfetti(dt);
     if (this.poofT >= 0) {
@@ -273,11 +357,27 @@ export class Director {
       (this.poof.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.9 * (1 - k));
       if (k >= 1) this.poofT = -1;
     }
-
-    const g = this.ground(this.ball.position);
-    this.ballShadow.position.set(this.ball.position.x, g + 0.05, this.ball.position.z);
-    this.ballShadow.visible = this.ball.visible;
+    this.world.shadowFocus(this.flight ? this.ball.position : this.golfer.root.position);
     this.stepCamera(dt);
+  }
+
+  private stepWalk(dt: number) {
+    const w = this.walk;
+    if (!w) return;
+    w.t += dt;
+    const k = Math.min(w.t / w.dur, 1);
+    const g = this.golfer.root;
+    g.position.lerpVectors(w.from, w.to, k);
+    g.position.y = this.ground(g.position);
+    // turn to face the ball over the last few steps
+    const turn = Math.max(0, (k - 0.75) / 0.25);
+    g.rotation.y = w.yaw + shortAngle(w.endYaw - w.yaw) * turn;
+    if (k >= 1) {
+      this.walk = null;
+      g.rotation.y = w.endYaw;
+      this.setMove("idle");
+      w.done();
+    }
   }
 
   private stepFlight(dt: number) {
@@ -308,12 +408,15 @@ export class Director {
       this.trail.geometry.setDrawRange(0, this.trailPts.length);
       return;
     }
-    if (f.lost) {
+    if (f.result === "lost" || f.result === "water") {
       if (!f.landed) {
         f.landed = true;
         this.ball.visible = false;
-        this.poof.position.copy(f.land).setY(f.land.y + 1.5);
+        const splash = f.result === "water";
+        (this.poof.material as THREE.MeshBasicMaterial).color.set(splash ? "#bfe9ff" : "#ffffff");
+        this.poof.position.copy(f.land).setY(f.land.y + (splash ? 0.3 : 1.5));
         this.poofT = 0;
+        splash ? sfx.land() : sfx.whoosh();
       }
       if (f.t > f.dur + 0.7) this.endFlight();
       return;
@@ -364,13 +467,21 @@ export class Director {
       return;
     }
     if (this.cam === "follow") {
+      // Ride behind the ball, looking a little ahead so you see where it's going.
       const b = this.ball.position, f = this.flight;
       const heading = f ? f.land.clone().sub(f.from).setY(0).normalize() : this.dir;
-      // Ride behind the ball, looking a little ahead so you see where it's going.
       pos = b.clone().addScaledVector(heading, -14).add(new THREE.Vector3(0, 5.5, 0));
       look = b.clone().addScaledVector(heading, 16);
       look.y = (b.y + this.ground(look)) / 2;
       rate = 4.5;
+    } else if (this.cam === "walk") {
+      // Follow behind the golfer as they walk up to the ball.
+      const g = this.golfer.root.position, heading = this.ball.position.clone().sub(g).setY(0);
+      if (heading.lengthSq() < 1) heading.copy(this.dir);
+      heading.normalize();
+      pos = g.clone().addScaledVector(heading, -7).add(new THREE.Vector3(0, 3.6, 0));
+      look = this.ball.position.clone().addScaledVector(this.dir, 6);
+      rate = 3;
     } else if (this.cam === "celebrate") {
       const c = this.golfer.root.position, a = this.camT * 0.5;
       pos = c.clone().add(new THREE.Vector3(Math.cos(a) * 6, 2.8, Math.sin(a) * 6));
@@ -392,3 +503,5 @@ export class Director {
     if (this.camera.position.y < floor) this.camera.position.y = floor;
   }
 }
+
+const shortAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));

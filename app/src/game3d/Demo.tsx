@@ -2,7 +2,7 @@
 // on Redhawk with no sign-in and nothing saved. Never shipped (see App.tsx).
 import { useMemo } from "react";
 import { playSequence } from "../lib/courses";
-import { course } from "../lib/fixtures";
+import { course, features } from "../lib/fixtures";
 import HoleGame from "./HoleGame";
 
 export default function Demo() {
@@ -11,6 +11,8 @@ export default function Demo() {
   return (
     <HoleGame
       roundId="demo"
+      courseId="redhawk"
+      features={features("redhawk")}
       hole={hole}
       me="demo-player"
       owner={{ id: "demo-golfer", name: "Mike", score: hole.par + 1 }}

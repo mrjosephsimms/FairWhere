@@ -205,6 +205,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         <Suspense fallback={<div className="hg-loading">Loading the course…</div>}>
           <HoleGame
             roundId={sel.id}
+            courseId={sel.course_id}
             hole={gameHole}
             me={me}
             owner={{

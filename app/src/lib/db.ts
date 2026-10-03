@@ -1,7 +1,7 @@
 // Typed data access. Every read is filtered by RLS on the server
 // (supabase/migrations/20261003000001_init.sql); nothing here is a security boundary.
 import { supabase } from "./supabase";
-import type { CourseData } from "./courses";
+import type { CourseData, CourseFeatures } from "./courses";
 import type { Mode } from "./pace";
 
 export interface Profile {
@@ -92,6 +92,12 @@ export async function getCourses(ids: string[]): Promise<Map<string, CourseData>
     (rows as { data: CourseData }[]).forEach((r) => courseCache.set(r.data.id, r.data));
   }
   return courseCache;
+}
+
+/** Mapped fairways / bunkers / water / woods / trees, for the hole game (big; load on demand). */
+export async function getCourseFeatures(id: string): Promise<CourseFeatures | null> {
+  const row: { features: CourseFeatures | null } = check(await supabase.from("courses").select("features").eq("id", id).single());
+  return row.features;
 }
 
 // ------------------------------------------------------------------- rounds

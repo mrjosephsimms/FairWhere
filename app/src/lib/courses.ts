@@ -25,6 +25,18 @@ export interface CourseData {
   holes: Hole[];
 }
 
+/**
+ * Mapped features around a course (OpenStreetMap via scripts/fetch_features.py), in the
+ * `courses.features` column. Polygons are [lat, lng] rings; trees are single points.
+ */
+export interface CourseFeatures {
+  fairways: LatLng[][];
+  bunkers: LatLng[][];
+  water: LatLng[][];
+  woods: LatLng[][];
+  trees: LatLng[];
+}
+
 /** A hole in the order it's played this round; `n` is 1..18. */
 export interface PlayHole extends Hole {
   n: number;

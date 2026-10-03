@@ -277,19 +277,44 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 @keyframes hg-pop { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.4); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
   26% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -70%) scale(1); } }
 
-.hg-bottom { position: absolute; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; max-width: 520px; margin: 0 auto; }
-.hg-info { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-.hg-info span { background: rgba(255, 255, 255, .92); border-radius: 99px; padding: 6px 12px; font-size: 14px; box-shadow: 0 3px 10px rgba(0, 0, 0, .12); }
-.hg-info b { font-weight: 700; }
-.hg-club { font-weight: 700; color: var(--accent); }
-.hg-meter { border: 0; border-radius: 22px; padding: 14px 16px 12px; background: rgba(255, 255, 255, .95); box-shadow: 0 6px 0 rgba(29, 74, 44, .25), 0 10px 30px rgba(0, 0, 0, .18);
-  display: flex; flex-direction: column; gap: 10px; cursor: pointer; touch-action: manipulation; }
-.hg-meter:disabled { opacity: .55; cursor: default; }
-.hg-meter:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 3px 0 rgba(29, 74, 44, .25), 0 8px 20px rgba(0, 0, 0, .18); }
-.hg-track { position: relative; height: 26px; border-radius: 13px; overflow: hidden; background: linear-gradient(90deg, #dff3e4, #fff1d6 80%, #ffd4d4); box-shadow: inset 0 2px 4px rgba(0, 0, 0, .12); }
-.hg-zone { position: absolute; top: 0; bottom: 0; background: linear-gradient(#5fd38d, #2fa864); }
-.hg-mark { position: absolute; top: -3px; bottom: -3px; width: 8px; margin-left: -4px; border-radius: 4px; background: #1d2b20; box-shadow: 0 0 0 2px #fff; }
-.hg-tap { font: 700 20px var(--display); letter-spacing: .08em; color: #1d4a2c; min-height: 24px; }
+/* Wii-style HUD: power bar left, aim bar bottom, club bottom-left, map bottom-right. */
+.hg-panel { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.hg-left { background: linear-gradient(90deg, rgba(0, 60, 110, 0), rgba(0, 60, 110, .78) 30%); color: #fff; padding: 4px 12px 4px 30px;
+  border-radius: 0 10px 10px 0; font-size: 14px; text-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+.hg-left b { font: 700 24px/1 var(--display); letter-spacing: .02em; margin-right: 3px; }
+.hg-wind { display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, .9); border-radius: 99px; padding: 3px 10px 3px 6px;
+  color: #1f7ae0; font-size: 13px; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+.hg-wind svg { transition: transform .3s; }
+.hg-wind b { font: 700 17px var(--display); color: var(--ink); }
+.hg-beat { background: rgba(255, 255, 255, .9); border-radius: 99px; padding: 3px 10px; font-size: 12px; color: var(--muted); box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+.hg-beat b { color: var(--flag); font: 700 16px var(--display); }
+.hg-title small { font: 600 13px var(--body); letter-spacing: .04em; opacity: .9; margin-top: 10px; }
+
+.hg-power { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 26px; height: min(46vh, 300px); border-radius: 13px;
+  background: linear-gradient(0deg, #e3f3e7, #fff4d9 80%, #ffd6d6); border: 3px solid #fff; box-shadow: 0 4px 14px rgba(0, 0, 0, .25), inset 0 2px 5px rgba(0, 0, 0, .15);
+  overflow: hidden; opacity: .55; transition: opacity .2s; }
+.hg-power.live { opacity: 1; }
+.hg-power i { position: absolute; left: 50%; width: 6px; height: 6px; margin: 0 0 -3px -3px; border-radius: 50%; background: rgba(0, 0, 0, .25); }
+.hg-power-zone { position: absolute; left: 0; right: 0; background: linear-gradient(90deg, #4fd287, #24a35d); }
+.hg-power-mark { position: absolute; left: -3px; right: -3px; height: 6px; margin-bottom: -3px; border-radius: 3px; background: #1d2b20; box-shadow: 0 0 0 2px #fff; }
+
+.hg-dir { position: absolute; left: 50%; bottom: calc(118px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(62vw, 300px); height: 22px; border-radius: 11px;
+  background: linear-gradient(90deg, #ffd6d6, #fff4d9 30%, #e3f3e7 50%, #fff4d9 70%, #ffd6d6); border: 3px solid #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .25), inset 0 2px 5px rgba(0, 0, 0, .15); overflow: hidden; opacity: .55; transition: opacity .2s; }
+.hg-dir.live { opacity: 1; }
+.hg-dir-zone { position: absolute; top: 0; bottom: 0; background: linear-gradient(#4fd287, #24a35d); }
+.hg-dir-mark { position: absolute; top: -3px; bottom: -3px; width: 6px; margin-left: -3px; border-radius: 3px; background: #1d2b20; box-shadow: 0 0 0 2px #fff; }
+
+.hg-club { position: absolute; left: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 6px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, 0)); color: #fff; padding: 6px 28px 6px 8px; border-radius: 12px; }
+.hg-club-icon { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .4)); }
+.hg-club span { display: flex; flex-direction: column; line-height: 1.05; }
+.hg-club b { font: 700 22px var(--display); letter-spacing: .03em; color: #ffd84d; text-shadow: 0 2px 0 rgba(0, 0, 0, .35); }
+.hg-club small { font-size: 12px; opacity: .9; }
+.hg-map { position: absolute; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); border-radius: 12px; border: 3px solid rgba(255, 255, 255, .9);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3); }
+.hg-hint { position: absolute; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom)); transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+  color: #fff; font: 700 15px var(--body); text-shadow: 0 1px 3px rgba(0, 0, 0, .55); }
 
 .hg-result { position: absolute; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); max-width: 460px; margin: 0 auto; background: rgba(255, 255, 255, .96);
   border-radius: 26px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; box-shadow: 0 10px 40px rgba(0, 0, 0, .25);

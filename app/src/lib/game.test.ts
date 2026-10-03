@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { aimPoint, CLUBS, METER_MAX, SWEET, tapToSwing, distanceToPin, lieAt, makeGameHole, MAX_STROKES, newGame, pickClub, putt, puttTarget, swing, toLatLng, toXY, type GameState } from "./game";
+import {
+  aimPoint, CLUBS, distanceToPin, dropBeforeWater, lieAt, makeGameHole, MAX_STROKES, METER_MAX, newGame, ON_LINE, pickClub, putt, puttTarget,
+  SWEET, swing, tapDirection, tapPower, toLatLng, toXY, holeWind, type GameHole, type GameState,
+} from "./game";
 import { playSequence } from "./courses";
-import { course } from "./fixtures";
+import { course, features } from "./fixtures";
 
 const seq = playSequence(course("redhawk"));
 const steady = () => 0.5; // no random scatter
+const straight: GameHole = {
+  n: 1, par: 4, line: [[0, 0], [0, 350]], green: [0, 350], greenRadius: 14, origin: [33, -117],
+  features: { fairways: [], bunkers: [], water: [], woods: [], trees: [] },
+};
 const par4 = makeGameHole(seq.find((h) => h.par === 4 && h.centerline.length >= 2)!);
 
 /** Perfect swings until on the green, then perfect putts. */
@@ -61,13 +68,12 @@ describe("playing a hole", () => {
     }
   });
 
-  it("a big slice off the tee is lost: stroke and distance, same spot", () => {
-    const straight = { n: 1, par: 4, line: [[0, 0], [0, 350]] as [number, number][], green: [0, 350] as [number, number], greenRadius: 14, origin: [33, -117] as [number, number] };
+  it("a big miss off the tee is lost: stroke and distance, same spot", () => {
     const s = swing(newGame(straight), straight, 1, 1, steady);
     expect(s.shots[0].result).toBe("lost");
     expect(s.strokes).toBe(2);
     expect(s.ball).toEqual([0, 0]);
-    expect(swing(newGame(straight), straight, 1, 0.3, steady).shots[0].result).toBe("fairway");
+    expect(swing(newGame(straight), straight, 1, 0.15, steady).shots[0].result).toBe("fairway");
   });
 
   it("knows fairway, rough and lost by distance off the line", () => {
@@ -106,19 +112,98 @@ describe("putting", () => {
   });
 });
 
-describe("one-tap swing", () => {
-  it("the sweet spot is full and straight", () => {
-    expect(tapToSwing((SWEET[0] + SWEET[1]) / 2)).toEqual({ power: 1, aim: 0 });
+describe("two-tap swing", () => {
+  it("direction: the green zone is dead straight, the edges are the biggest miss", () => {
+    expect(tapDirection(0)).toBe(0);
+    expect(tapDirection(ON_LINE * 0.9)).toBe(0);
+    expect(tapDirection(1)).toBe(1);
+    expect(tapDirection(-1)).toBe(-1);
+    expect(tapDirection(0.5)).toBeGreaterThan(0);
   });
-  it("early is short with a slight pull", () => {
-    const t = tapToSwing(0.6);
-    expect(t.power).toBeLessThan(1);
-    expect(t.aim).toBeLessThan(0);
-    expect(t.aim).toBeGreaterThan(-1);
-  });
-  it("late is an over-swing that slices, hard at the very end", () => {
-    const t = tapToSwing(METER_MAX);
-    expect(t.power).toBeCloseTo(METER_MAX, 6);
-    expect(t.aim).toBe(1);
+  it("speed: the green zone is full, early is short, late is long", () => {
+    expect(tapPower((SWEET[0] + SWEET[1]) / 2)).toBe(1);
+    expect(tapPower(0.46)).toBeCloseTo(0.5, 1);
+    expect(tapPower(METER_MAX)).toBeCloseTo(METER_MAX, 6);
   });
 });
+
+describe("hazards", () => {
+  const sq = (cx: number, cy: number, r: number): [number, number][] => [[cx - r, cy - r], [cx + r, cy - r], [cx + r, cy + r], [cx - r, cy + r]];
+  const hazards: GameHole = {
+    ...straight,
+    features: { fairways: [sq(0, 175, 18)], bunkers: [sq(25, 210, 8)], water: [sq(0, 250, 15)], woods: [sq(-50, 150, 15)], trees: [[40, 120]] },
+  };
+
+  it("reads the lie from the mapped polygons", () => {
+    expect(lieAt([0, 175], hazards)).toBe("fairway");
+    expect(lieAt([25, 210], hazards)).toBe("bunker");
+    expect(lieAt([0, 250], hazards)).toBe("water");
+    expect(lieAt([-50, 150], hazards)).toBe("trees");
+    expect(lieAt([40, 122], hazards)).toBe("trees"); // next to a mapped tree
+    expect(lieAt([25, 100], hazards)).toBe("rough"); // off the mapped fairway
+    expect(lieAt([200, 100], hazards)).toBe("lost");
+  });
+
+  it("water: one penalty and a dry drop where it went in", () => {
+    const s: GameState = { ...newGame(hazards), ball: [0, 175], lie: "fairway" };
+    const drop = dropBeforeWater([0, 175], [0, 250], hazards);
+    expect(lieAt(drop, hazards)).not.toBe("water");
+    expect(drop[1]).toBeLessThan(235);
+    // Going at the flag from 150 m and coming up short finds the water every time.
+    const approach: GameState = { ...newGame(hazards), ball: [0, 200], lie: "fairway" };
+    const wet = swing(approach, hazards, 0.4, 0, steady);
+    expect(wet.shots[0].result).toBe("water");
+    expect(wet.strokes).toBe(2);
+    expect(lieAt(wet.ball, hazards)).not.toBe("water");
+    expect(wet.ball[1]).toBeGreaterThan(200); // dropped where it went in, not back at the start
+    expect(s.lie).toBe("fairway");
+  });
+
+  it("lays up short of water instead of aiming into it", () => {
+    const s: GameState = { ...newGame(hazards), ball: [0, 70], lie: "fairway" };
+    expect(lieAt(aimPoint(s, hazards), hazards)).not.toBe("water");
+  });
+
+  it("plays out of the trees shorter than from the fairway", () => {
+    const from: [number, number] = [0, 0];
+    const fw = swing({ ...newGame(straight), ball: from, lie: "fairway" }, straight, 1, 0, steady);
+    const tr = swing({ ...newGame(straight), ball: from, lie: "trees" }, straight, 1, 0, steady);
+    expect(distanceToPin(tr, straight)).toBeGreaterThan(distanceToPin(fw, straight));
+  });
+});
+
+describe("the real courses", () => {
+  it("perfect golf finishes every hole close to par, hazards and all", () => {
+    for (const id of ["redhawk", "temecula-creek-inn"]) {
+      const c = course(id);
+      const seq = playSequence(c, c.nines ? [c.nines[0], c.nines[1]] : null);
+      for (const h of seq) {
+        const hole = makeGameHole(h, features(id));
+        const s = playPerfect(hole);
+        expect(s.holed).toBe(true);
+        expect(s.strokes, `${id} hole ${h.n}`).toBeLessThanOrEqual(hole.par + 1);
+      }
+    }
+  });
+});
+
+describe("wind", () => {
+  it("each hole has its own steady breeze, calm to about 12 mph", () => {
+    expect(holeWind(5)).toEqual(holeWind(5));
+    for (let n = 1; n <= 18; n++) {
+      const w = holeWind(n);
+      expect(w.mph).toBeGreaterThanOrEqual(0);
+      expect(w.mph).toBeLessThanOrEqual(12);
+      expect(Math.hypot(...w.dir)).toBeCloseTo(1, 9);
+    }
+  });
+
+  it("pushes the ball downwind, more on longer shots", () => {
+    const breezy: GameHole = { ...straight, wind: { dir: [1, 0], mph: 10 } };
+    const calm = swing(newGame(straight), straight, 1, 0, steady);
+    const blown = swing(newGame(breezy), breezy, 1, 0, steady);
+    expect(blown.ball[0] - calm.ball[0]).toBeGreaterThan(3); // drifted east
+    expect(blown.ball[0] - calm.ball[0]).toBeLessThan(8);
+  });
+});
+
