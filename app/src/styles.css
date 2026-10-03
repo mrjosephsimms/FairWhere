@@ -232,6 +232,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .hunt { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fff4e5; color: #8a5300; font-size: 14px; font-weight: 600; }
 .hunt-sm { font-size: 12px; font-weight: 600; color: #b56b00; }
 
+.score-chip { margin-left: 6px; padding: 0 7px; border-radius: 99px; background: rgba(17, 24, 19, .07); color: var(--ink); font-size: 12px; line-height: 18px; }
 .score-total { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .score-total b { color: var(--ink); font-size: 16px; }
 .score-pad { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; gap: 10px; }

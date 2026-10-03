@@ -121,7 +121,7 @@ select pg_temp.ok((select mode = 'walking' from public.rounds), 'friend cannot c
 select pg_temp.ok((select searching_since is not null from public.rounds), 'friend sees A is hunting for a ball');
 update public.rounds set searching_since = null;
 select pg_temp.ok((select searching_since is not null from public.rounds), 'friend cannot clear A''s ball hunt');
-select pg_temp.ok((select count(*) = 0 from public.round_scores), 'friend cannot see A''s scorecard');
+select pg_temp.ok((select sum(strokes) = 8 from public.round_scores), 'friend sees A''s scorecard');
 select pg_temp.fails($$insert into public.round_scores (round_id, hole, strokes) select id, 5, 9 from public.rounds$$,
   'friend cannot write on A''s scorecard');
 update public.round_scores set strokes = 1;
@@ -134,6 +134,7 @@ select pg_temp.ok((select sum(strokes) = 8 from public.round_scores), 'friend co
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 set role authenticated;
 select pg_temp.ok((select count(*) = 0 from public.rounds), 'stranger C sees no rounds');
+select pg_temp.ok((select count(*) = 0 from public.round_scores), 'stranger C sees no scorecards');
 select pg_temp.fails($$insert into public.rounds (course_id, nines, tee_time) values ('temecula-creek-inn', array['Creek','Creek'], now())$$,
   'same nine twice rejected');
 select pg_temp.fails($$insert into public.rounds (course_id, tee_time) values ('temecula-creek-inn', now())$$, '27-hole course needs nines');
