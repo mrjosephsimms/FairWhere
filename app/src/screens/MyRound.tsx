@@ -1,18 +1,35 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { CourseData } from "../lib/courses";
-import { endRound, listCourses, setHole, startRound, type Round } from "../lib/db";
+import { endRound, listCourses, setHole, setMode, startRound, type Round } from "../lib/db";
+import { DEFAULT_TARGET, switchTarget, type Mode } from "../lib/pace";
 import { useAction, type LiveData } from "../lib/hooks";
 import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
 import { HoleStrip, PaceChip, StopConfirm } from "../components/RoundView";
 
 const PACES = [
+  [210, "3h 30m"],
   [225, "3h 45m"],
   [240, "4h 00m"],
   [255, "4h 15m"],
   [270, "4h 30m"],
   [285, "4h 45m"],
+  [300, "5h 00m"],
 ] as const;
+
+const MODES: [Mode, string][] = [["riding", "Riding"], ["walking", "Walking"]];
+
+export function ModeIcon({ mode, size = 18 }: { mode: Mode; size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {mode === "riding" ? (
+        <><path d="M3 15V9h11l3 6M3 15h17v-3h-3M6 9V5h9" /><circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" /></>
+      ) : (
+        <><circle cx="13" cy="4" r="2" /><path d="m9 21 3-6 2 2v4M7 12l3-4 4 1 2 4M10 8l-1 5" /></>
+      )}
+    </svg>
+  );
+}
 
 export function MyRound({ data, me, now }: { data: LiveData; me: string; now: number }) {
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
@@ -34,7 +51,9 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
   const [tee, setTee] = useState(() => toTimeInput(nextTeeSlot(new Date())));
-  const [target, setTarget] = useState(255);
+  const [mode, setModeState] = useState<Mode>("riding");
+  const [target, setTarget] = useState(DEFAULT_TARGET.riding);
+  const [paceTouched, setPaceTouched] = useState(false);
   const [visibility, setVisibility] = useState<"friends" | "selected">("friends");
   const [viewers, setViewers] = useState<Set<string>>(new Set());
   const { busy, err, run } = useAction(data.reload);
@@ -79,6 +98,7 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
         nines: course.nines ? [front, back] : null,
         tee_time: teeTimeFromInput(tee, new Date()),
         target_minutes: target,
+        mode,
         visibility,
         viewers: [...viewers],
       }),
@@ -90,6 +110,16 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 
   return (
     <form className="card" onSubmit={submit}>
+      <div className="segmented" role="radiogroup" aria-label="Walking or riding">
+        {MODES.map(([m, label]) => (
+          <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => {
+            setModeState(m);
+            if (!paceTouched) setTarget(DEFAULT_TARGET[m]); // follow the mode until they pick a pace
+          }}>
+            <ModeIcon mode={m} /> {label}
+          </button>
+        ))}
+      </div>
       <label className="f">
         Course
         <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
@@ -121,8 +151,8 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
           <input type="time" value={tee} onChange={(e) => setTee(e.target.value)} required />
         </label>
         <label className="f">
-          Usual pace
-          <select value={target} onChange={(e) => setTarget(Number(e.target.value))}>
+          Usual pace ({mode})
+          <select value={target} onChange={(e) => (setTarget(Number(e.target.value)), setPaceTouched(true))}>
             {PACES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
@@ -172,6 +202,15 @@ function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: nu
       <div className="row">
         <div className="course">{label}</div>
         <PaceChip est={est} />
+      </div>
+      <div className="row">
+        <span className="mode-tag"><ModeIcon mode={round.mode} /> {round.mode === "walking" ? "Walking" : "Riding"}</span>
+        <button className="btn ghost small" disabled={busy} onClick={() => {
+          const to: Mode = round.mode === "walking" ? "riding" : "walking";
+          run(() => setMode(round.id, to, switchTarget(round.target_minutes, round.mode, to)));
+        }}>
+          {round.mode === "walking" ? "Got a cart" : "Switch to walking"}
+        </button>
       </div>
       <div className="big">
         <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "On hole"}</span>

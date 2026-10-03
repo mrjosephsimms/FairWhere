@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { allocate, estimate, paceChip, type PaceInput } from "./pace";
+import { allocate, DEFAULT_TARGET, estimate, paceChip, switchTarget, type PaceInput } from "./pace";
 import { playSequence } from "./courses";
 import { course } from "./fixtures";
 
-const pars = playSequence(course("redhawk")).map((h) => h.par);
+const seq = playSequence(course("redhawk"));
+const pars = seq.map((h) => h.par);
+const yards = seq.map((h) => h.yards);
 const MIN = 60000;
 const now = Date.UTC(2026, 9, 3, 18, 0);
 const base = (o: Partial<PaceInput>): PaceInput => ({ pars, teeTime: now - 150 * MIN, targetMinutes: 255, hole: 1, status: "live", ...o });
@@ -13,6 +15,48 @@ describe("allocate", () => {
     const a = allocate(pars, 255);
     expect(a.reduce((s, x) => s + x, 0)).toBeCloseTo(255, 6);
     expect(a[0] / a[3]).toBeCloseTo(1.22 / 0.78, 6); // hole 1 par 5 vs hole 4 par 3
+  });
+});
+
+describe("walking vs riding", () => {
+  it("defaults walkers to a longer usual round", () => {
+    expect(DEFAULT_TARGET.walking).toBeGreaterThan(DEFAULT_TARGET.riding);
+  });
+
+  it("riding ignores yardage; the split is the same as par-only", () => {
+    expect(allocate(pars, 240, { mode: "riding", yards })).toEqual(allocate(pars, 240));
+  });
+
+  it("walking keeps the total but gives long holes more time than short ones of the same par", () => {
+    const walk = allocate(pars, 270, { mode: "walking", yards });
+    expect(walk.reduce((s, x) => s + x, 0)).toBeCloseTo(270, 6);
+    const par4s = seq.map((h, i) => ({ y: h.yards, t: walk[i] })).filter((_, i) => pars[i] === 4 && yards[i]);
+    const longest = par4s.reduce((a, b) => (b.y! > a.y! ? b : a));
+    const shortest = par4s.reduce((a, b) => (b.y! < a.y! ? b : a));
+    expect(longest.t).toBeGreaterThan(shortest.t);
+  });
+
+  it("walking falls back to par weight when yardage is unknown", () => {
+    expect(allocate(pars, 270, { mode: "walking", yards: pars.map(() => null) })).toEqual(allocate(pars, 270));
+  });
+
+  it("a walker's full-round estimate is longer at the default pace", () => {
+    const ride = estimate(base({ teeTime: now + MIN, targetMinutes: DEFAULT_TARGET.riding, mode: "riding" }), now);
+    const walk = estimate(base({ teeTime: now + MIN, targetMinutes: DEFAULT_TARGET.walking, mode: "walking", yards }), now);
+    expect((walk.eta - ride.eta) / MIN).toBe(DEFAULT_TARGET.walking - DEFAULT_TARGET.riding);
+  });
+
+  it("switching mode mid-round rescales the target, clamped to the DB range", () => {
+    expect(switchTarget(240, "riding", "walking")).toBe(270);
+    expect(switchTarget(270, "walking", "riding")).toBe(240);
+    expect(switchTarget(400, "riding", "walking")).toBe(420);
+  });
+
+  it("picking up a cart mid-round brings the ETA in", () => {
+    const at = { hole: 10, holeStartedAt: now - 5 * MIN, teeTime: now - 130 * MIN, yards };
+    const walking = estimate(base({ ...at, mode: "walking", targetMinutes: 270 }), now);
+    const riding = estimate(base({ ...at, mode: "riding", targetMinutes: switchTarget(270, "walking", "riding") }), now);
+    expect(riding.eta).toBeLessThan(walking.eta);
   });
 });
 

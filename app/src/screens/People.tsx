@@ -6,6 +6,7 @@ import { paceChip } from "../lib/pace";
 import { ago, fmtDur, fmtTime } from "../lib/time";
 import { Avatar } from "../components/Avatar";
 import { HoleStrip, PaceChip } from "../components/RoundView";
+import { ModeIcon } from "./MyRound";
 
 export function People({ data, me, now, rounds, onOpen, onAddFriends }: {
   data: LiveData;
@@ -44,12 +45,13 @@ export function People({ data, me, now, rounds, onOpen, onAddFriends }: {
           est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(r.tee_time))}`
           : est.phase === "done" ? `Finished ${fmtTime(est.eta)}`
           : `Hole ${r.hole}`;
+        const how = r.mode === "walking" ? "Walking" : "Riding";
         return (
           <button key={r.id} className="row-btn" onClick={() => onOpen(r.id)}>
             <Avatar id={r.user_id} name={data.profiles.get(r.user_id)?.display_name || "Golfer"} me={r.user_id === me} badge={est.phase === "live" ? String(r.hole) : undefined} />
             <span className="row-main">
               <b>{nameOf(r.user_id)}</b>
-              <span className="sub">{status} · {label}</span>
+              <span className="sub">{status}{est.phase === "done" ? "" : ` · ${how}`} · {label}</span>
               <span className="sub faint">Updated {ago(Date.parse(r.updated_at), now)}</span>
             </span>
             <span className="row-end">
@@ -92,7 +94,7 @@ export function RoundDetail({ round, data, me, now }: { round: Round; data: Live
   const { est, hole, label } = info;
   return (
     <div className="detail">
-      <p className="sub">{label}</p>
+      <p className="sub mode-line"><ModeIcon mode={round.mode} size={16} /> {round.mode === "walking" ? "Walking" : "Riding"} · {label}</p>
       <div className="stats">
         <div className="stat">
           <span className="label">{est.phase === "pre" ? "Tee time" : est.phase === "done" ? "Last hole" : "On hole"}</span>

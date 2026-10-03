@@ -12,7 +12,7 @@ const round = (over: Partial<Round> = {}): Round => ({
   tee_time: "2026-10-03T15:00:00Z", target_minutes: 255,
   hole: 7, hole_started_at: "2026-10-03T16:50:00Z", hole_fraction: null,
   last_lat: null, last_lng: null, last_fix_at: null,
-  status: "live", visibility: "friends", finished_at: null, updated_at: "2026-10-03T16:50:00Z",
+  status: "live", visibility: "friends", mode: "riding", finished_at: null, updated_at: "2026-10-03T16:50:00Z",
   ...over,
 });
 const live: PaceEstimate = { phase: "live", eta: NOW, deltaMin: 0, frac: 0.5 };

@@ -2,6 +2,7 @@
 // (supabase/migrations/20261003000001_init.sql); nothing here is a security boundary.
 import { supabase } from "./supabase";
 import type { CourseData } from "./courses";
+import type { Mode } from "./pace";
 
 export interface Profile {
   id: string;
@@ -31,6 +32,7 @@ export interface Round {
   last_fix_at: string | null;
   status: "live" | "done" | "cancelled";
   visibility: "friends" | "selected";
+  mode: Mode;
   finished_at: string | null;
   updated_at: string;
 }
@@ -109,6 +111,7 @@ export interface StartRound {
   nines: string[] | null;
   tee_time: Date;
   target_minutes: number;
+  mode: Mode;
   visibility: "friends" | "selected";
   viewers: string[];
 }
@@ -123,6 +126,7 @@ export async function startRound(s: StartRound): Promise<Round> {
         nines: s.nines,
         tee_time: s.tee_time.toISOString(),
         target_minutes: s.target_minutes,
+        mode: s.mode,
         hole: 1,
         hole_started_at: new Date(Math.max(teeMs, Date.now())).toISOString(),
         visibility: s.visibility,
@@ -148,6 +152,11 @@ export async function setHole(id: string, hole: number) {
       .update({ hole, hole_started_at: new Date().toISOString(), hole_fraction: null })
       .eq("id", id),
   );
+}
+
+/** Walking <-> riding mid-round; the usual-pace target moves with it so the ETA follows. */
+export async function setMode(id: string, mode: Mode, targetMinutes: number) {
+  check(await supabase.from("rounds").update({ mode, target_minutes: targetMinutes }).eq("id", id));
 }
 
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */
