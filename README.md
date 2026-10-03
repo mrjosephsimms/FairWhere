@@ -27,7 +27,7 @@ Matches Yardsale Club's app shell, minus its Python backend:
 
 1. **Supabase**: create a new project (e.g. `find-my-golfer`). Don't reuse SaleMap's project.
    - Apply the migrations, in order: `supabase db push --db-url "<connection string>"`, or paste each file from `supabase/migrations/` into the SQL editor.
-   - **Auth → URL Configuration → Redirect URLs**: add `findmygolfer://auth-callback` and `http://localhost:5173`.
+   - **Auth → URL Configuration → Redirect URLs**: add `findmygolfer://auth-callback` and `http://localhost:5180`.
    - **Auth → Email Templates → Magic Link**: add `{{ .Token }}` so the email also carries a 6-digit code.
 2. **`app/.env`** (copy `app/.env.example`):
    - `VITE_SUPABASE_URL`: Project Settings → API → Project URL
@@ -41,7 +41,7 @@ Matches Yardsale Club's app shell, minus its Python backend:
 
 ```sh
 cd app && npm install
-npm run dev          # http://localhost:5173 (web works for everything except native deep links)
+npm run dev          # http://localhost:5180 (web works for everything except native deep links)
 npm test             # pace / hole detection / course order / tee-time tests (vitest)
 npm run typecheck
 ../scripts/test-db.sh   # applies all migrations to a throwaway Postgres and runs the RLS tests

@@ -17,8 +17,8 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
 - [x] Migrations 01–03 applied with `supabase db push --linked`. Verified: 6 public tables all RLS-on,
       `courses` = 2 rows, cron `expire-stale-rounds` (*/15) active, `rounds` + `friendships` in `supabase_realtime`.
       (01 needed `pgcrypto` → `extensions` schema: hosted Supabase installs extensions there.)
-- [x] Auth config pushed from `supabase/config.toml` (`supabase config push`): site URL `http://localhost:5173`,
-      redirect URLs `findmygolfer://auth-callback` + `http://localhost:5173`, email OTP length 8 → 6.
+- [x] Auth config pushed from `supabase/config.toml` (`supabase config push`): site URL `http://localhost:5180`,
+      redirect URLs `findmygolfer://auth-callback` + `http://localhost:5180` (+ `/**`), email OTP length 8 → 6.
 - [x] `app/.env` written (URL + `sb_publishable_…` key; gitignored, local to this Mac).
 - [ ] **Magic-link email with the 6-digit code**: template is ready at `supabase/templates/magic_link.html`, but the
       free plan rejects template edits on Supabase's built-in mailer. Needs custom SMTP first (Auth → SMTP; e.g. a
@@ -28,7 +28,7 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   For the two-user test, sign in with addresses on the org (or invite the second address to the org) — or set up SMTP.
 
 ## First real test (do this before any new features)
-1. `cd app && npm install && npm run dev` → sign in by email on http://localhost:5173.
+1. `cd app && npm install && npm run dev` → sign in by email on http://localhost:5180.
 2. Sign in as a second user in a private window. Add each other by friend code.
 3. User A starts a round and steps holes. User B's "Who's out" should update **without a refresh**
    (Realtime). If it doesn't, check that `rounds` and `friendships` are in Database → Publications →

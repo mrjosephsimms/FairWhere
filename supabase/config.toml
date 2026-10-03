@@ -2,8 +2,8 @@
 project_id = "find-my-golfer"
 
 [auth]
-site_url = "http://localhost:5173"
-additional_redirect_urls = ["findmygolfer://auth-callback", "http://localhost:5173"]
+site_url = "http://localhost:5180"
+additional_redirect_urls = ["findmygolfer://auth-callback", "http://localhost:5180", "http://localhost:5180/**"]
 
 # Magic link email: the app accepts either the link or the 6-digit code (SignIn.tsx).
 # NOT pushed yet: the free plan rejects template edits on Supabase's built-in mailer.
