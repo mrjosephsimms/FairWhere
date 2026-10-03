@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { CourseData } from "../lib/courses";
-import { endRound, listCourses, setHole, setMode, startRound, type Round } from "../lib/db";
-import { DEFAULT_TARGET, switchTarget, type Mode } from "../lib/pace";
+import { endRound, listCourses, setHole, startRound, type Round } from "../lib/db";
+import { DEFAULT_TARGET, type Mode } from "../lib/pace";
+import { ModeIcon } from "../components/ModeIcon";
+import { toYards } from "../lib/onCourse";
+import type { GpsState } from "../lib/tracker";
+import { fmtDur } from "../lib/time";
 import { useAction, type LiveData } from "../lib/hooks";
 import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
@@ -19,21 +23,9 @@ const PACES = [
 
 const MODES: [Mode, string][] = [["riding", "Riding"], ["walking", "Walking"]];
 
-export function ModeIcon({ mode, size = 18 }: { mode: Mode; size?: number }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      {mode === "riding" ? (
-        <><path d="M3 15V9h11l3 6M3 15h17v-3h-3M6 9V5h9" /><circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" /></>
-      ) : (
-        <><circle cx="13" cy="4" r="2" /><path d="m9 21 3-6 2 2v4M7 12l3-4 4 1 2 4M10 8l-1 5" /></>
-      )}
-    </svg>
-  );
-}
-
-export function MyRound({ data, me, now }: { data: LiveData; me: string; now: number }) {
+export function MyRound({ data, me, now, gps }: { data: LiveData; me: string; now: number; gps: GpsState }) {
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
-  if (live) return <LiveRound round={live} data={data} now={now} />;
+  if (live) return <LiveRound round={live} data={data} now={now} gps={gps} />;
   const last = data.rounds.find((r) => r.user_id === me && r.status === "done");
   return (
     <>
@@ -189,7 +181,7 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   );
 }
 
-function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: number }) {
+function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; now: number; gps: GpsState }) {
   const [confirmStop, setConfirmStop] = useState(false);
   const { busy, err, run } = useAction(data.reload);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
@@ -200,29 +192,34 @@ function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: nu
   return (
     <div className="card">
       <div className="row">
-        <div className="course">{label}</div>
+        <div className="course mode-line"><ModeIcon mode={round.mode} size={16} /> {label}</div>
         <PaceChip est={est} />
       </div>
-      <div className="row">
-        <span className="mode-tag"><ModeIcon mode={round.mode} /> {round.mode === "walking" ? "Walking" : "Riding"}</span>
-        <button className="btn ghost small" disabled={busy} onClick={() => {
-          const to: Mode = round.mode === "walking" ? "riding" : "walking";
-          run(() => setMode(round.id, to, switchTarget(round.target_minutes, round.mode, to)));
-        }}>
-          {round.mode === "walking" ? "Got a cart" : "Switch to walking"}
-        </button>
-      </div>
-      <div className="big">
-        <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "On hole"}</span>
-        <div className="hole">{round.hole}</div>
-        <div className="note">
-          Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""} · finish around <b>{fmtTime(est.eta)}</b>
+
+      <div className="stats">
+        <div className="stat">
+          <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "On hole"}</span>
+          <b>{round.hole}<small>/18</small></b>
+          <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>
+        </div>
+        <div className="stat">
+          <span className="label">To the green</span>
+          {gps.pos ? <b>{toYards(gps.pos.toGreenM)}<small>yds</small></b> : <b className="dim">—</b>}
+          <span className="sub">{gpsLine(gps)}</span>
         </div>
       </div>
+      {gps.pos && (
+        <div className="progress" aria-label={`${Math.round(gps.pos.frac * 100)}% of the hole`}>
+          <i style={{ width: `${Math.round(gps.pos.frac * 100)}%` }} />
+          <span>{Math.round(gps.pos.frac * 100)}% of the hole · {toYards(gps.pos.fromTeeM)} yds from the tee</span>
+        </div>
+      )}
+      {gps.searchingSince && <p className="hunt">🔎 Ball hunt? {fmtDur(now - gps.searchingSince)} in this spot. Your friends can see it.</p>}
+      <p className="note">Finish around <b>{fmtTime(est.eta)}</b></p>
       <div className="stepper">
         <button className="btn ghost" aria-label="Back one hole" disabled={busy || round.hole <= 1} onClick={() => go(round.hole - 1)}>−</button>
         {round.hole < 18 ? (
-          <button className="btn" disabled={busy} onClick={() => go(round.hole + 1)}>Walking to {round.hole + 1}</button>
+          <button className="btn" disabled={busy} onClick={() => go(round.hole + 1)}>On to hole {round.hole + 1}</button>
         ) : (
           <button className="btn flag" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish round</button>
         )}
@@ -241,4 +238,12 @@ function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: nu
       {err && <p className="note err" role="alert">{err}</p>}
     </div>
   );
+}
+
+function gpsLine(gps: GpsState): string {
+  if (gps.status === "asking") return "Finding you…";
+  if (gps.status === "denied") return "Location is off; use the buttons";
+  if (gps.status === "unavailable") return "No GPS on this device";
+  if (gps.status === "on" && !gps.pos) return "Off the course";
+  return gps.fix ? `GPS ±${Math.round(gps.fix.acc)} m` : "";
 }

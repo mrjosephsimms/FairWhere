@@ -99,6 +99,7 @@ select pg_temp.ok((select mode = 'riding' from public.rounds), 'mode defaults to
 update public.rounds set mode = 'walking';
 select pg_temp.ok((select mode = 'walking' from public.rounds), 'owner can switch to walking mid-round');
 select pg_temp.fails($$update public.rounds set mode = 'jogging'$$, 'mode must be walking or riding');
+update public.rounds set searching_since = now() - interval '4 minutes';
 reset role;
 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
@@ -110,6 +111,9 @@ select pg_temp.ok((select hole = 7 from public.rounds), 'friend cannot move A''s
 select pg_temp.ok((select mode = 'walking' from public.rounds), 'friend sees A is walking');
 update public.rounds set mode = 'riding';
 select pg_temp.ok((select mode = 'walking' from public.rounds), 'friend cannot change A''s mode');
+select pg_temp.ok((select searching_since is not null from public.rounds), 'friend sees A is hunting for a ball');
+update public.rounds set searching_since = null;
+select pg_temp.ok((select searching_since is not null from public.rounds), 'friend cannot clear A''s ball hunt');
 delete from public.rounds;
 reset role;
 select pg_temp.ok((select count(*) = 1 from public.rounds), 'friend cannot delete A''s round');
@@ -131,6 +135,7 @@ set role authenticated;
 update public.rounds set status = 'done' where status = 'live';
 select pg_temp.ok((select finished_at is not null and last_lat is null and last_lng is null and last_fix_at is null from public.rounds),
   'finish stamps finished_at and wipes coordinates');
+select pg_temp.ok((select searching_since is null from public.rounds), 'finish clears the ball hunt');
 select pg_temp.fails($$update public.rounds set status = 'live'$$, 'finished round cannot restart');
 reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');

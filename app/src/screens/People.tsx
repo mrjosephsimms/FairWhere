@@ -4,9 +4,11 @@ import type { Round } from "../lib/db";
 import { roundInfo } from "../lib/roundInfo";
 import { paceChip } from "../lib/pace";
 import { ago, fmtDur, fmtTime } from "../lib/time";
+import { FIX_FRESH_MS } from "../lib/geo";
+import { locateOnHole, toYards } from "../lib/onCourse";
 import { Avatar } from "../components/Avatar";
 import { HoleStrip, PaceChip } from "../components/RoundView";
-import { ModeIcon } from "./MyRound";
+import { ModeIcon } from "../components/ModeIcon";
 
 export function People({ data, me, now, rounds, onOpen, onAddFriends }: {
   data: LiveData;
@@ -45,13 +47,15 @@ export function People({ data, me, now, rounds, onOpen, onAddFriends }: {
           est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(r.tee_time))}`
           : est.phase === "done" ? `Finished ${fmtTime(est.eta)}`
           : `Hole ${r.hole}`;
-        const how = r.mode === "walking" ? "Walking" : "Riding";
         return (
           <button key={r.id} className="row-btn" onClick={() => onOpen(r.id)}>
             <Avatar id={r.user_id} name={data.profiles.get(r.user_id)?.display_name || "Golfer"} me={r.user_id === me} badge={est.phase === "live" ? String(r.hole) : undefined} />
             <span className="row-main">
               <b>{nameOf(r.user_id)}</b>
-              <span className="sub">{status}{est.phase === "done" ? "" : ` · ${how}`} · {label}</span>
+              <span className="sub mode-line">{est.phase !== "done" && <ModeIcon mode={r.mode} size={15} />}{status} · {label}</span>
+              {r.searching_since && est.phase === "live" && (
+                <span className="hunt-sm">🔎 Looking for a ball · {fmtDur(now - Date.parse(r.searching_since))}</span>
+              )}
               <span className="sub faint">Updated {ago(Date.parse(r.updated_at), now)}</span>
             </span>
             <span className="row-end">
@@ -92,14 +96,19 @@ export function RoundDetail({ round, data, me, now }: { round: Round; data: Live
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <p className="empty">Loading course…</p>;
   const { est, hole, label } = info;
+  const fresh = est.phase === "live" && round.last_lat != null && round.last_lng != null && round.last_fix_at != null &&
+    now - Date.parse(round.last_fix_at) < FIX_FRESH_MS;
+  const toGreen = fresh ? toYards(locateOnHole(hole, [round.last_lat!, round.last_lng!]).toGreenM) : null;
   return (
     <div className="detail">
-      <p className="sub mode-line"><ModeIcon mode={round.mode} size={16} /> {round.mode === "walking" ? "Walking" : "Riding"} · {label}</p>
+      <p className="sub mode-line"><ModeIcon mode={round.mode} size={16} /> {label}</p>
       <div className="stats">
         <div className="stat">
           <span className="label">{est.phase === "pre" ? "Tee time" : est.phase === "done" ? "Last hole" : "On hole"}</span>
           {est.phase === "pre" ? <b>{fmtTime(Date.parse(round.tee_time))}</b> : <b>{round.hole}<small>/18</small></b>}
-          {est.phase === "live" && <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>}
+          {est.phase === "live" && (
+            <span className="sub">{toGreen != null ? `~${toGreen} yds to the green` : `Par ${hole.par}${hole.yards ? ` · ${hole.yards} yds` : ""}`}</span>
+          )}
         </div>
         <div className="stat">
           <span className="label">{est.phase === "done" ? "Finished" : "Est. finish"}</span>
@@ -107,6 +116,9 @@ export function RoundDetail({ round, data, me, now }: { round: Round; data: Live
           {est.phase === "live" && <span className="sub">About {fmtDur(est.eta - now)} left</span>}
         </div>
       </div>
+      {round.searching_since && est.phase === "live" && (
+        <p className="hunt">🔎 Looking for a ball? Same spot off the fairway for {fmtDur(now - Date.parse(round.searching_since))}.</p>
+      )}
       <div className="row-between">
         <PaceChip est={est} />
         <span className="sub faint">Updated {ago(Date.parse(round.updated_at), now)}</span>
