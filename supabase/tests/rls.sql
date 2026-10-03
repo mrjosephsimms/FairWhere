@@ -100,6 +100,13 @@ update public.rounds set mode = 'walking';
 select pg_temp.ok((select mode = 'walking' from public.rounds), 'owner can switch to walking mid-round');
 select pg_temp.fails($$update public.rounds set mode = 'jogging'$$, 'mode must be walking or riding');
 update public.rounds set searching_since = now() - interval '4 minutes';
+insert into public.round_scores (round_id, hole, strokes) select id, 1, 5 from public.rounds;
+insert into public.round_scores (round_id, hole, strokes) select id, 2, 4 from public.rounds
+  on conflict (round_id, hole) do update set strokes = excluded.strokes;
+update public.round_scores set strokes = 3 where hole = 2;
+select pg_temp.ok((select sum(strokes) = 8 from public.round_scores), 'owner keeps score (insert, upsert, edit)');
+select pg_temp.fails($$insert into public.round_scores (round_id, hole, strokes) select id, 3, 0 from public.rounds$$, 'strokes must be 1..20');
+select pg_temp.fails($$insert into public.round_scores (round_id, hole, strokes) select id, 19, 4 from public.rounds$$, 'hole must be 1..18');
 reset role;
 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
@@ -114,9 +121,15 @@ select pg_temp.ok((select mode = 'walking' from public.rounds), 'friend cannot c
 select pg_temp.ok((select searching_since is not null from public.rounds), 'friend sees A is hunting for a ball');
 update public.rounds set searching_since = null;
 select pg_temp.ok((select searching_since is not null from public.rounds), 'friend cannot clear A''s ball hunt');
+select pg_temp.ok((select count(*) = 0 from public.round_scores), 'friend cannot see A''s scorecard');
+select pg_temp.fails($$insert into public.round_scores (round_id, hole, strokes) select id, 5, 9 from public.rounds$$,
+  'friend cannot write on A''s scorecard');
+update public.round_scores set strokes = 1;
+delete from public.round_scores;
 delete from public.rounds;
 reset role;
 select pg_temp.ok((select count(*) = 1 from public.rounds), 'friend cannot delete A''s round');
+select pg_temp.ok((select sum(strokes) = 8 from public.round_scores), 'friend could not change or delete A''s scores');
 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 set role authenticated;

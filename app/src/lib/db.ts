@@ -164,6 +164,18 @@ export async function updateRoundPosition(
   check(await supabase.from("rounds").update(patch).eq("id", id).eq("status", "live"));
 }
 
+// ------------------------------------------------------------------- scores
+
+/** Your scorecard for a round: hole -> strokes (private to you, RLS). */
+export async function getScores(roundId: string): Promise<Map<number, number>> {
+  const rows: { hole: number; strokes: number }[] = check(await supabase.from("round_scores").select("hole, strokes").eq("round_id", roundId));
+  return new Map(rows.map((r) => [r.hole, r.strokes]));
+}
+
+export async function setScore(roundId: string, hole: number, strokes: number) {
+  check(await supabase.from("round_scores").upsert({ round_id: roundId, hole, strokes, updated_at: new Date().toISOString() }));
+}
+
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */
 export async function endRound(id: string, how: "done" | "cancelled") {
   check(await supabase.from("rounds").update({ status: how }).eq("id", id));
