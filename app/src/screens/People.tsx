@@ -1,4 +1,5 @@
 // The "People" panel: everyone you follow, Find My style. Tap a row for their round.
+import { useState } from "react";
 import type { LiveData } from "../lib/hooks";
 import type { Round } from "../lib/db";
 import { roundInfo } from "../lib/roundInfo";
@@ -97,7 +98,8 @@ export function People({ data, me, now, rounds, onOpen, onAddFriends }: {
 }
 
 /** One golfer's round, shown in the sheet while the map zooms to their course. */
-export function RoundDetail({ round, data, me, now }: { round: Round; data: LiveData; me: string; now: number }) {
+export function RoundDetail({ round, data, me, now, onPlay }: { round: Round; data: LiveData; me: string; now: number; onPlay: (hole: number) => void }) {
+  const [pick, setPick] = useState<number | null>(null);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <p className="empty">Loading course…</p>;
   const { est, hole, label, seq } = info;
@@ -137,7 +139,22 @@ export function RoundDetail({ round, data, me, now }: { round: Round; data: Live
           <span className="score-total"><b>{fmtToPar(card.toPar)}</b> · {card.strokes} thru {card.thru}</span>
         </div>
       )}
-      <HoleStrip round={round} now={now} scores={card.thru ? scores : undefined} pars={pars} />
+      <HoleStrip round={round} now={now} scores={card.thru ? scores : undefined} pars={pars} selected={pick ?? undefined} onSelect={setPick} />
+      {pick ? (
+        <div className="play-card">
+          <div>
+            <b>Hole {pick}</b> · Par {pars[pick - 1]}{seq[pick - 1].yards ? ` · ${seq[pick - 1].yards} yds` : ""}
+            <span className="sub">
+              {scores.get(pick) != null
+                ? `${round.user_id === me ? "You" : data.profiles.get(round.user_id)?.display_name || "Golfer"} made ${scores.get(pick)}. Can you beat it?`
+                : "Not scored yet. Set the score to beat."}
+            </span>
+          </div>
+          <button className="btn" onClick={() => onPlay(pick)}>🎮 Play hole {pick}</button>
+        </div>
+      ) : (
+        <p className="note">🎮 Tap any hole to play it yourself and try to beat the score.</p>
+      )}
       <p className="sub">
         {est.phase === "pre" ? "Tees off" : "Teed off"} {fmtTime(Date.parse(round.tee_time))}
         {round.user_id === me ? " · this is your round" : ""}

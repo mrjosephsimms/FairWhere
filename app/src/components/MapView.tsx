@@ -43,6 +43,15 @@ export interface CourseOverlay {
   finished: boolean;
 }
 
+/** The "play this hole" ball: where it is, where it's been, and where it's aimed. */
+export interface GameOverlay {
+  ball: [number, number];
+  trail: [number, number][][];
+  aim?: [number, number] | null;
+  /** 0..1 mid-flight; the ball grows a little as it "rises". */
+  height?: number;
+}
+
 /** Where to move the camera. The map only moves when `key` changes. */
 export interface MapFocus {
   key: string;
@@ -51,9 +60,10 @@ export interface MapFocus {
   zoom?: number;
 }
 
-export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, interactive = true }: {
+export function MapView({ pins = [], course, game, focus, bottomPad = 0, onPin, interactive = true }: {
   pins?: MapPin[];
   course?: CourseOverlay | null;
+  game?: GameOverlay | null;
   focus?: MapFocus;
   bottomPad?: number;
   onPin?: (id: string) => void;
@@ -63,7 +73,10 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
   const map = useRef<MLMap | null>(null);
   const markers = useRef(new Map<string, Marker>());
   const courseRef = useRef(course);
+  const gameRef = useRef(game);
+  const ballRef = useRef<Marker | null>(null);
   const onPinRef = useRef(onPin);
+  gameRef.current = game;
   const [sat, setSat] = useState(false);
   courseRef.current = course;
   onPinRef.current = onPin;
@@ -78,7 +91,7 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
       attributionControl: { compact: true },
       pitchWithRotate: false,
     });
-    m.on("style.load", () => drawCourse(m, courseRef.current));
+    m.on("style.load", () => (drawCourse(m, courseRef.current), drawGame(m, gameRef.current)));
     map.current = m;
     return () => {
       m.remove();
@@ -93,8 +106,26 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
 
   useEffect(() => {
     const m = map.current;
-    if (m?.isStyleLoaded()) drawCourse(m, course);
+    if (m) whenReady(m, () => drawCourse(m, courseRef.current));
   }, [course]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    whenReady(m, () => drawGame(m, gameRef.current));
+    if (!game) {
+      ballRef.current?.remove();
+      ballRef.current = null;
+      return;
+    }
+    if (!ballRef.current) {
+      const node = document.createElement("div"); // MapLibre owns this element's transform...
+      node.appendChild(document.createElement("span")).className = "golf-ball"; // ...so the look lives inside
+      ballRef.current = new maplibregl.Marker({ element: node, anchor: "center" }).setLngLat([game.ball[1], game.ball[0]]).addTo(m);
+    }
+    ballRef.current.setLngLat([game.ball[1], game.ball[0]]);
+    (ballRef.current.getElement().firstChild as HTMLElement).style.setProperty("--lift", String(game.height ?? 0));
+  }, [game]);
 
   // Avatar pins: plain DOM markers, updated in place so they glide instead of flicker.
   useEffect(() => {
@@ -153,6 +184,16 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
   );
 }
 
+/**
+ * Run `fn` now if the style is ready, else once the map goes idle. (isStyleLoaded()
+ * is false while tiles are still loading, and an overlay skipped then never appears.)
+ * Callers read the latest overlay from a ref, so a late run draws the current one.
+ */
+function whenReady(m: MLMap, fn: () => void) {
+  if (m.isStyleLoaded()) fn();
+  else m.once("idle", fn);
+}
+
 // ------------------------------------------------------------------ course paths
 
 const PAST = "#1f8a4c", NOW = "#e5484d", NEXT = "#8f9a92";
@@ -191,44 +232,67 @@ function drawCourse(m: MLMap, o: CourseOverlay | null | undefined) {
   if (!o) return;
   ensureIcons(m);
   m.addSource("course", { type: "geojson", data: courseFeatures(o.seq, o.current, o.finished) });
+  // Keep the game's ball trail and aim line on top when the course redraws.
+  const add = (layer: Parameters<MLMap["addLayer"]>[0]) => m.addLayer(layer, m.getLayer("g-aim") ? "g-aim" : undefined);
   const holes: ExpressionSpecification = ["==", ["get", "kind"], "hole"];
   const links: ExpressionSpecification = ["==", ["get", "kind"], "link"];
   const isNow: ExpressionSpecification = ["==", ["get", "state"], "now"];
   const round = { "line-cap": "round", "line-join": "round" } as const;
 
   // Soft glow under the hole being played.
-  m.addLayer({ id: "c-halo", type: "line", source: "course", filter: ["all", holes, isNow], layout: round,
+  add({ id: "c-halo", type: "line", source: "course", filter: ["all", holes, isNow], layout: round,
     paint: { "line-color": NOW, "line-width": 24, "line-opacity": 0.2, "line-blur": 5 } });
   // Dotted walk from each green to the next tee.
-  m.addLayer({ id: "c-link", type: "line", source: "course", filter: links, layout: round,
+  add({ id: "c-link", type: "line", source: "course", filter: links, layout: round,
     paint: { "line-color": byState(PAST, PAST, NEXT, NOW), "line-width": ["match", ["get", "state"], "up", 3.6, 2.8],
       "line-dasharray": [0.1, 2], "line-opacity": ["match", ["get", "state"], "up", 1, "next", 0.9, 0.7] } });
   // The holes: white casing, then the coloured path.
-  m.addLayer({ id: "c-casing", type: "line", source: "course", filter: holes, layout: round,
+  add({ id: "c-casing", type: "line", source: "course", filter: holes, layout: round,
     paint: { "line-color": "#ffffff", "line-width": ["case", isNow, 13, 10], "line-opacity": 0.95 } });
-  m.addLayer({ id: "c-line", type: "line", source: "course", filter: holes, layout: round,
+  add({ id: "c-line", type: "line", source: "course", filter: holes, layout: round,
     paint: { "line-color": byState(PAST, NOW, NEXT), "line-width": ["case", isNow, 9, 6.5] } });
   // Chevrons riding along each hole in the direction of play.
-  m.addLayer({ id: "c-arrows", type: "symbol", source: "course", filter: holes,
+  add({ id: "c-arrows", type: "symbol", source: "course", filter: holes,
     layout: { "symbol-placement": "line", "symbol-spacing": 56, "icon-image": "fmg-chevron", "icon-size": ["case", isNow, 0.95, 0.75],
       "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-rotation-alignment": "map" },
     paint: { "icon-color": "#ffffff" } });
   // One arrow mid-walk pointing at the next tee.
-  m.addLayer({ id: "c-link-arrow", type: "symbol", source: "course", filter: links,
+  add({ id: "c-link-arrow", type: "symbol", source: "course", filter: links,
     layout: { "symbol-placement": "line-center", "icon-image": "fmg-chevron", "icon-size": ["match", ["get", "state"], "up", 1.35, 1.05],
       "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-rotation-alignment": "map" },
     paint: { "icon-color": byState(PAST, PAST, NEXT, NOW), "icon-halo-color": "#ffffff", "icon-halo-width": 2 } });
   // Tee badges with the hole number.
-  m.addLayer({ id: "c-tee", type: "circle", source: "course", filter: ["==", ["get", "kind"], "tee"],
+  add({ id: "c-tee", type: "circle", source: "course", filter: ["==", ["get", "kind"], "tee"],
     paint: { "circle-radius": ["case", isNow, 11, 8.5], "circle-color": byState(PAST, NOW, NEXT),
       "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
-  m.addLayer({ id: "c-tee-num", type: "symbol", source: "course", filter: ["==", ["get", "kind"], "tee"],
+  add({ id: "c-tee-num", type: "symbol", source: "course", filter: ["==", ["get", "kind"], "tee"],
     layout: { "text-field": ["to-string", ["get", "n"]], "text-font": ["Noto Sans Bold"], "text-size": ["case", isNow, 12, 10],
       "text-allow-overlap": true, "text-ignore-placement": true },
     paint: { "text-color": "#ffffff" } });
   // A little flag on every green.
-  m.addLayer({ id: "c-flag", type: "symbol", source: "course", filter: ["==", ["get", "kind"], "green"],
+  add({ id: "c-flag", type: "symbol", source: "course", filter: ["==", ["get", "kind"], "green"],
     layout: { "icon-image": "fmg-flag", "icon-anchor": "bottom-left", "icon-offset": [-4, 2], "icon-size": ["case", isNow, 1, 0.75],
       "icon-allow-overlap": true, "icon-ignore-placement": true },
     paint: { "icon-color": byState(PAST, NOW, "#5f6b63"), "icon-halo-color": "#ffffff", "icon-halo-width": 1.2 } });
+}
+
+// ------------------------------------------------------------------ hole game
+
+function drawGame(m: MLMap, g: GameOverlay | null | undefined) {
+  const data = {
+    type: "FeatureCollection" as const,
+    features: g
+      ? [
+          ...g.trail.map((t) => ({ type: "Feature" as const, properties: { kind: "trail" }, geometry: { type: "LineString" as const, coordinates: t.map((p) => [p[1], p[0]]) } })),
+          ...(g.aim ? [{ type: "Feature" as const, properties: { kind: "aim" }, geometry: { type: "LineString" as const, coordinates: [[g.ball[1], g.ball[0]], [g.aim[1], g.aim[0]]] } }] : []),
+        ]
+      : [],
+  };
+  const src = m.getSource("game") as maplibregl.GeoJSONSource | undefined;
+  if (src) return src.setData(data);
+  m.addSource("game", { type: "geojson", data });
+  m.addLayer({ id: "g-aim", type: "line", source: "game", filter: ["==", ["get", "kind"], "aim"], layout: { "line-cap": "round" },
+    paint: { "line-color": "#ffffff", "line-width": 2.5, "line-dasharray": [0.1, 1.8], "line-opacity": 0.95 } });
+  m.addLayer({ id: "g-trail", type: "line", source: "game", filter: ["==", ["get", "kind"], "trail"], layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#ffffff", "line-width": 3, "line-opacity": 0.85 } });
 }

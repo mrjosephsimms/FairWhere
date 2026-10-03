@@ -190,6 +190,27 @@ export async function setScore(roundId: string, hole: number, strokes: number) {
   check(await supabase.from("round_scores").upsert({ round_id: roundId, hole, strokes, updated_at: new Date().toISOString() }));
 }
 
+// --------------------------------------------------------------- hole game
+
+export interface GamePlay {
+  id: string;
+  round_id: string;
+  hole: number;
+  player_id: string;
+  strokes: number;
+  created_at: string;
+}
+
+/** Everyone's "play this hole" results on the rounds you can see. */
+export async function getPlaysFor(roundIds: string[]): Promise<GamePlay[]> {
+  if (!roundIds.length) return [];
+  return check(await supabase.from("game_plays").select("*").in("round_id", roundIds).order("created_at"));
+}
+
+export async function recordPlay(roundId: string, hole: number, strokes: number) {
+  check(await supabase.from("game_plays").insert({ round_id: roundId, hole, strokes }));
+}
+
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */
 export async function endRound(id: string, how: "done" | "cancelled") {
   check(await supabase.from("rounds").update({ status: how }).eq("id", id));

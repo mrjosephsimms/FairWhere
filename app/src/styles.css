@@ -58,6 +58,14 @@ h1 span { color: var(--flag); }
   background: var(--flag); color: #fff; font: 700 12px/22px var(--body); border: 2px solid #fff;
 }
 
+.golf-ball {
+  --lift: 0;
+  display: block; width: 14px; height: 14px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 35% 30%, #fff 0 45%, #dfe3dd 100%);
+  box-shadow: 0 calc(2px + var(--lift) * 14px) calc(3px + var(--lift) * 10px) rgba(0, 0, 0, calc(.35 - var(--lift) * .2)), 0 0 0 1px rgba(0, 0, 0, .15);
+  transform: scale(calc(1 + var(--lift) * .9));
+}
+
 /* ------------------------------------------------------------- sharing pill */
 .sharing {
   position: absolute; z-index: 4; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
@@ -243,6 +251,34 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .pad-val span { font-size: 13px; color: var(--muted); font-weight: 600; }
 .pad-val.unset { cursor: pointer; }
 .pad-val.unset b { color: #c9cec9; }
+
+/* ------------------------------------------------------------- hole game */
+.play-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border-radius: 16px; padding: 12px 14px; }
+.play-card > div { display: flex; flex-direction: column; min-width: 0; }
+.play-card .sub { white-space: normal; }
+.play-card .btn { flex: none; padding: 11px 14px; font-size: 15px; }
+.challengers { margin: 0; font-size: 13px; color: var(--muted); }
+
+.game { display: flex; flex-direction: column; gap: 12px; }
+.game-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 15px; }
+.game-head .beat { color: var(--muted); font-size: 14px; }
+.game-head .beat b { color: var(--flag); font-size: 17px; }
+.game-status { margin: 0; font-size: 15px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.game-status b { color: var(--ink); }
+.game-note { font-weight: 700; color: var(--accent); }
+.meter { border: 0; padding: 14px; border-radius: 18px; background: var(--surface); display: flex; flex-direction: column; gap: 10px; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(16, 24, 18, .08); touch-action: manipulation; }
+.meter:disabled { cursor: default; opacity: .7; }
+.meter-track { position: relative; height: 22px; border-radius: 11px; background: linear-gradient(90deg, #e7ebe6, #f1e6d6 85%, #f4d2d2); overflow: hidden; }
+.meter-zone { position: absolute; top: 0; bottom: 0; background: rgba(31, 138, 76, .35); border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+.meter-mark { position: absolute; top: -2px; bottom: -2px; width: 5px; margin-left: -2px; border-radius: 3px; background: var(--ink); box-shadow: 0 0 0 2px #fff; }
+.meter-label { font-weight: 700; font-size: 17px; color: var(--ink); }
+.game-result { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; background: var(--surface); border-radius: 18px; padding: 18px; }
+.big-score { font: 700 64px/1 var(--body); letter-spacing: -.03em; }
+.board { display: flex; flex-direction: column; gap: 6px; background: var(--surface); border-radius: 16px; padding: 12px 14px; }
+.board-row { display: flex; justify-content: space-between; font-size: 15px; }
+.board-row.real { color: var(--flag); font-weight: 600; }
+.board-row small { color: var(--muted); font-weight: 400; }
 
 /* ------------------------------------------------------------- sign in */
 .splash { display: flex; align-items: flex-end; justify-content: center; }

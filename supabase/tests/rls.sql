@@ -100,6 +100,7 @@ update public.rounds set mode = 'walking';
 select pg_temp.ok((select mode = 'walking' from public.rounds), 'owner can switch to walking mid-round');
 select pg_temp.fails($$update public.rounds set mode = 'jogging'$$, 'mode must be walking or riding');
 update public.rounds set searching_since = now() - interval '4 minutes';
+select set_config('test.a_round', (select id::text from public.rounds), false);
 insert into public.round_scores (round_id, hole, strokes) select id, 1, 5 from public.rounds;
 insert into public.round_scores (round_id, hole, strokes) select id, 2, 4 from public.rounds
   on conflict (round_id, hole) do update set strokes = excluded.strokes;
@@ -122,6 +123,13 @@ select pg_temp.ok((select searching_since is not null from public.rounds), 'frie
 update public.rounds set searching_since = null;
 select pg_temp.ok((select searching_since is not null from public.rounds), 'friend cannot clear A''s ball hunt');
 select pg_temp.ok((select sum(strokes) = 8 from public.round_scores), 'friend sees A''s scorecard');
+insert into public.game_plays (round_id, hole, strokes) select id, 2, 3 from public.rounds;
+select pg_temp.ok((select count(*) = 1 and bool_and(player_id = '00000000-0000-0000-0000-00000000000b') from public.game_plays),
+  'friend B plays A''s hole 2 and the play is B''s');
+select pg_temp.fails($$insert into public.game_plays (round_id, hole, player_id, strokes)
+  select id, 2, '00000000-0000-0000-0000-00000000000d', 3 from public.rounds$$, 'cannot record a play as someone else');
+select pg_temp.fails($$update public.game_plays set strokes = 1$$, 'plays cannot be edited');
+select pg_temp.fails($$insert into public.game_plays (round_id, hole, strokes) select id, 2, 11 from public.rounds$$, 'game strokes capped at 10');
 select pg_temp.fails($$insert into public.round_scores (round_id, hole, strokes) select id, 5, 9 from public.rounds$$,
   'friend cannot write on A''s scorecard');
 update public.round_scores set strokes = 1;
@@ -135,6 +143,9 @@ select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 set role authenticated;
 select pg_temp.ok((select count(*) = 0 from public.rounds), 'stranger C sees no rounds');
 select pg_temp.ok((select count(*) = 0 from public.round_scores), 'stranger C sees no scorecards');
+select pg_temp.ok((select count(*) = 0 from public.game_plays), 'stranger C sees no game plays');
+select pg_temp.fails($$insert into public.game_plays (round_id, hole, strokes)
+  values (current_setting('test.a_round')::uuid, 2, 4)$$, 'stranger C cannot play A''s round');
 select pg_temp.fails($$insert into public.rounds (course_id, nines, tee_time) values ('temecula-creek-inn', array['Creek','Creek'], now())$$,
   'same nine twice rejected');
 select pg_temp.fails($$insert into public.rounds (course_id, tee_time) values ('temecula-creek-inn', now())$$, '27-hole course needs nines');
@@ -146,6 +157,7 @@ reset role;
 -- Finish: coordinates wiped, still visible to friends for 4h.
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 set role authenticated;
+select pg_temp.ok((select count(*) = 1 from public.game_plays), 'A sees friends'' plays on their round');
 update public.rounds set status = 'done' where status = 'live';
 select pg_temp.ok((select finished_at is not null and last_lat is null and last_lng is null and last_fix_at is null from public.rounds),
   'finish stamps finished_at and wipes coordinates');

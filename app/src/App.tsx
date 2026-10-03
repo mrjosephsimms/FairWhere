@@ -9,6 +9,7 @@ import { playSequence } from "./lib/courses";
 import { useRoundTracker } from "./lib/tracker";
 import { StopConfirm } from "./components/RoundView";
 import { MapView, type CourseOverlay, type MapFocus, type MapPin } from "./components/MapView";
+import { PlayHole, type GameView } from "./screens/PlayHole";
 import { Sheet, type Detent } from "./components/Sheet";
 import { SignIn } from "./screens/SignIn";
 import { People, RoundDetail } from "./screens/People";
@@ -52,6 +53,8 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const [detent, setDetent] = useState<Detent>("mid");
   const [sheetPx, setSheetPx] = useState(0);
   const [recenter, setRecenter] = useState(0);
+  const [game, setGame] = useState<number | null>(null); // hole being played on the selected round
+  const [gameView, setGameView] = useState<GameView | null>(null);
 
   const rounds = useMemo(() => visibleRounds(data.rounds, now), [data.rounds, now]);
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
@@ -75,8 +78,20 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     if (invite) (setTab("me"), setDetent("full"));
   }, [invite]);
   useEffect(() => {
-    if (selected && !sel) setSelected(null); // their round ended or dropped off
+    if (selected && !sel) (setSelected(null), setGame(null)); // their round ended or dropped off
   }, [selected, sel]);
+  // Stable while playing: only the (cached) course object and the hole number feed it,
+  // so data refreshes and the clock don't reset a game mid-hole.
+  const selCourse = sel ? data.courses.get(sel.course_id) : undefined;
+  const selNines = sel?.nines?.join("|");
+  const gameHole = useMemo(() => {
+    if (!game || !selCourse) return undefined;
+    try {
+      return playSequence(selCourse, selNines ? selNines.split("|") : null)[game - 1];
+    } catch {
+      return undefined;
+    }
+  }, [game, selCourse, selNines]);
 
   const pins: MapPin[] = useMemo(
     () =>
@@ -95,14 +110,19 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   // The course on the map: whoever's selected, else your own live round on the Round tab.
   const focusRound = sel ?? (tab === "round" ? live : undefined);
   const course: CourseOverlay | null = useMemo(() => {
+    if (gameHole) return { seq: [gameHole], current: gameHole.n, finished: false };
     const info = focusRound && roundInfo(focusRound, data.courses.get(focusRound.course_id), now);
     return info ? { seq: info.seq, current: focusRound!.status === "live" ? focusRound!.hole : 0, finished: focusRound!.status !== "live" } : null;
-  }, [focusRound, data.courses, now]);
+  }, [focusRound, data.courses, now, gameHole]);
 
   const focus: MapFocus = (() => {
+    if (gameView) return gameView.focus;
     const key = `${tab}|${focusRound?.id ?? ""}|${data.loaded}|${pins.length > 0}|${course ? 1 : 0}|${recenter}`;
     // Live: frame the hole they're on. Otherwise the whole course.
-    if (course) return { key, bounds: courseBounds(course.current ? [course.seq[course.current - 1]] : course.seq) };
+    if (course) {
+      const on = course.seq.find((h) => h.n === course.current); // by number: a game overlay holds just one hole
+      return { key, bounds: courseBounds(on ? [on] : course.seq) };
+    }
     if (pins.length === 1) return { key, center: [pins[0].lng, pins[0].lat], zoom: 15 };
     if (pins.length) {
       const lats = pins.map((p) => p.lat), lngs = pins.map((p) => p.lng);
@@ -112,6 +132,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   })();
 
   function openRound(id: string) {
+    setGame(null);
     setSelected(id);
     setTab("people");
     setDetent("mid");
@@ -119,17 +140,20 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   function go(t: Tab) {
     setTab(t);
     setSelected(null);
+    setGame(null);
     if (t !== "people" && detent === "peek") setDetent("mid");
   }
 
-  const title = sel
+  const title = gameHole
+    ? `Play hole ${gameHole.n}`
+    : sel
     ? sel.user_id === me ? "Your round" : data.profiles.get(sel.user_id)?.display_name || "Golfer"
     : tab === "people" ? "People" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Me";
 
   const header = (
     <div className="sheet-head">
       {sel && (
-        <button className="icon-btn" aria-label="Back to people" onClick={() => setSelected(null)}>
+        <button className="icon-btn" aria-label={game ? "Back to the round" : "Back to people"} onClick={() => (game ? setGame(null) : setSelected(null))}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="m15 6-6 6 6 6" /></svg>
         </button>
       )}
@@ -144,16 +168,18 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   return (
     <div className="app">
-      <MapView pins={pins} course={course} focus={focus} bottomPad={sheetPx} onPin={openRound} />
-      <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
+      <MapView pins={gameHole ? [] : pins} course={course} game={gameHole ? gameView?.overlay : null} focus={focus} bottomPad={sheetPx} onPin={openRound} />
+      {!gameHole && <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20.5 3.5 3.8 10.6c-.9.4-.8 1.7.2 1.9l6.6 1.2 1.3 6.6c.2 1 1.5 1.1 1.9.2L20.5 3.5z" /></svg>
-      </button>
+      </button>}
       {live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
       {data.error && <p className="toast err" role="alert">Couldn't refresh: {data.error}</p>}
 
-      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header} view={sel?.id ?? tab}>
-        {sel ? (
-          <RoundDetail round={sel} data={data} me={me} now={now} />
+      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header} view={gameHole ? `game-${gameHole.n}` : sel?.id ?? tab}>
+        {sel && gameHole ? (
+          <PlayHole round={sel} hole={gameHole} data={data} me={me} onView={setGameView} />
+        ) : sel ? (
+          <RoundDetail round={sel} data={data} me={me} now={now} onPlay={(n) => (setGame(n), setDetent("mid"))} />
         ) : tab === "people" ? (
           <People data={data} me={me} now={now} rounds={rounds} onOpen={openRound} onAddFriends={() => (go("me"), setDetent("full"))} />
         ) : tab === "round" ? (
