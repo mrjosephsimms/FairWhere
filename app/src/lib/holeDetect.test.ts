@@ -54,4 +54,38 @@ describe("makeHoleTracker", () => {
   it("reports off course without changing", () => {
     expect(makeHoleTracker()(lines, [33.5, -117.15], 7)).toEqual({ change: false, offCourse: true });
   });
+
+  it("advances when the golfer reaches the next tee", () => {
+    const track = makeHoleTracker();
+    const tee8 = lines[7][0];
+    expect(track(lines, tee8, 7).change).toBe(false);
+    expect(track(lines, tee8, 7)).toMatchObject({ change: true, hole: 8 });
+  });
+
+  it("doesn't advance while putting out next to the following tee", () => {
+    const track = makeHoleTracker();
+    const green7 = lines[6][lines[6].length - 1];
+    for (let i = 0; i < 4; i++) expect(track(lines, green7, 7).change).toBe(false);
+  });
+
+  it("doesn't jump ahead from somewhere merely near a later hole (e.g. a house by the course)", () => {
+    const track = makeHoleTracker();
+    const mid8 = lines[7][Math.floor(lines[7].length / 2)];
+    const nearby: LatLng = [mid8[0] + 80 / 111320, mid8[1]]; // ~80 m off hole 8's line
+    for (let i = 0; i < 4; i++) expect(track(lines, nearby, 6).change).toBe(false);
+  });
+
+  it("with a tee right beside the green, putting out doesn't count but walking onto the tee does", () => {
+    const m = 1 / 111320; // ~1 m of latitude
+    const green: LatLng = [33.5, -117.1];
+    const tight: LatLng[][] = [
+      [[33.5 - 350 * m, -117.1], green], // hole 1 finishes at `green`
+      [[33.5 + 20 * m, -117.1], [33.5 + 380 * m, -117.1]], // hole 2 tees off 20 m away
+    ];
+    const track = makeHoleTracker();
+    for (let i = 0; i < 4; i++) expect(track(tight, green, 1).change).toBe(false);
+    track(tight, tight[1][0], 1);
+    expect(track(tight, tight[1][0], 1)).toMatchObject({ change: true, hole: 2 });
+  });
 });
+

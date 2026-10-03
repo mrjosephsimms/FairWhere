@@ -57,16 +57,30 @@ export type FixResult =
   | { change: boolean; offCourse?: false; hole: number; frac: number; d: number };
 
 /**
- * Debouncer: advance only when the same new hole is seen on `confirmFixes`
- * consecutive fixes, and never move backwards (the manual buttons cover that).
+ * Debouncer for auto-advance. Moves on to a later hole when, on `confirmFixes`
+ * consecutive fixes, the golfer is either
+ *  - at the next tee: within `teeRadiusM` of it AND closer to it than to the green
+ *    they just played (many tees sit beside the previous green, so putting out
+ *    must not count), or
+ *  - clearly on a later hole's fairway: within `onFairwayM` of its centerline
+ *    (covers a missed tee arrival, e.g. a GPS gap).
+ * Never moves backwards (the manual buttons cover that).
  */
-export function makeHoleTracker({ confirmFixes = 2 } = {}) {
+export function makeHoleTracker({ confirmFixes = 2, teeRadiusM = 35, onFairwayM = 40 } = {}) {
   let last = { hole: 0, count: 0 };
   return function onFix(lines: LatLng[][], pt: LatLng, currentHole: number): FixResult {
     const hit = detectHole(lines, pt, currentHole);
-    if (!hit) return { change: false, offCourse: true };
-    last = hit.hole === last.hole ? { hole: hit.hole, count: last.count + 1 } : { hole: hit.hole, count: 1 };
-    const change = last.count >= confirmFixes && hit.hole > currentHole;
-    return { change, hole: change ? hit.hole : currentHole, frac: hit.hole === currentHole ? hit.frac : 0, d: hit.d };
+    const nextTee = lines[currentHole]?.[0];
+    const played = lines[currentHole - 1];
+    const dTee = nextTee ? distM(pt, nextTee) : Infinity;
+    const atNextTee = dTee <= teeRadiusM && (!played || dTee < distM(pt, played[played.length - 1]));
+    if (!hit && !atNextTee) {
+      last = { hole: 0, count: 0 };
+      return { change: false, offCourse: true };
+    }
+    const candidate = atNextTee ? currentHole + 1 : hit!.hole > currentHole && hit!.d <= onFairwayM ? hit!.hole : currentHole;
+    last = candidate === last.hole ? { hole: candidate, count: last.count + 1 } : { hole: candidate, count: 1 };
+    if (candidate > currentHole && last.count >= confirmFixes) return { change: true, hole: candidate, frac: 0, d: atNextTee ? dTee : hit!.d };
+    return { change: false, hole: currentHole, frac: hit && hit.hole === currentHole ? hit.frac : 0, d: hit ? hit.d : dTee };
   };
 }

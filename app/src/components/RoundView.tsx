@@ -1,6 +1,7 @@
 // Shared round visuals: pace chip, front/back nine hole strip, stop confirmation.
 import { useEffect, useState } from "react";
 import { paceChip, type PaceEstimate } from "../lib/pace";
+import { holeResult } from "../lib/score";
 import type { Round } from "../lib/db";
 
 export function PaceChip({ est }: { est: PaceEstimate }) {
@@ -8,14 +9,25 @@ export function PaceChip({ est }: { est: PaceEstimate }) {
   return <span className={`pill ${c.tone}`}>{c.label}</span>;
 }
 
-/** Nine pills at a time: the nine they're on, with a Front 9 / Back 9 switch to peek at the other. */
-export function HoleStrip({ round, now }: { round: Round; now: number }) {
+/**
+ * Nine pills at a time: the nine they're on, with a Front 9 / Back 9 switch to peek at
+ * the other. With `scores`, the pills become the scorecard: tap one to pick that hole.
+ */
+export function HoleStrip({ round, now, scores, pars, selected, onSelect }: {
+  round: Round;
+  now: number;
+  scores?: Map<number, number>;
+  pars?: number[];
+  selected?: number;
+  onSelect?: (hole: number) => void;
+}) {
   const done = round.status !== "live";
   const started = now >= Date.parse(round.tee_time);
   const onBack = done || round.hole > 9;
-  const [back, setBack] = useState(onBack);
-  useEffect(() => setBack(onBack), [onBack]); // follow them through the turn
-  const first = back ? 10 : 1;
+  const focusBack = selected != null ? selected > 9 : onBack;
+  const [back, setBack] = useState(focusBack);
+  useEffect(() => setBack(focusBack), [focusBack]); // follow them (or the picked hole) through the turn
+  const holes = Array.from({ length: 9 }, (_, i) => (back ? 10 : 1) + i);
   return (
     <div className="nine">
       <div className="nine-switch" role="tablist" aria-label="Which nine">
@@ -27,12 +39,23 @@ export function HoleStrip({ round, now }: { round: Round; now: number }) {
         ))}
       </div>
       <div className="strip" aria-label={done ? "Round finished" : `Hole ${round.hole} of 18`}>
-        {Array.from({ length: 9 }, (_, i) => {
-          const n = first + i;
-          const cls = done || n < round.hole ? "done" : n === round.hole && started ? "now" : "";
-          return <i key={n} className={cls}>{n}</i>;
+        {holes.map((n) => {
+          const cls = `${done || n < round.hole ? "done" : n === round.hole && started ? "now" : ""}${selected === n ? " sel" : ""}`;
+          return onSelect ? (
+            <button key={n} className={cls} aria-pressed={selected === n} aria-label={`Hole ${n}`} onClick={() => onSelect(n)}>{n}</button>
+          ) : (
+            <i key={n} className={cls}>{n}</i>
+          );
         })}
       </div>
+      {scores && pars && (
+        <div className="strip scores" aria-hidden>
+          {holes.map((n) => {
+            const s = scores.get(n);
+            return <span key={n} className={s ? holeResult(s, pars[n - 1]) : ""}>{s ?? "·"}</span>;
+          })}
+        </div>
+      )}
     </div>
   );
 }

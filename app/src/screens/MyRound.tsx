@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { CourseData } from "../lib/courses";
-import { endRound, listCourses, setHole, startRound, type Round } from "../lib/db";
+import { endRound, getScores, listCourses, setHole, setScore, startRound, type Round } from "../lib/db";
+import { fmtToPar, summarize } from "../lib/score";
 import { DEFAULT_TARGET, type Mode } from "../lib/pace";
 import { ModeIcon } from "../components/ModeIcon";
 import { toYards } from "../lib/onCourse";
@@ -186,10 +187,11 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
   const { busy, err, run } = useAction(data.reload);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <div className="card empty">Loading course…</div>;
-  const { est, hole, label } = info;
+  const { est, hole, label, seq } = info;
   const go = (n: number) => n >= 1 && n <= 18 && n !== round.hole && run(() => setHole(round.id, n));
 
   return (
+    <>
     <div className="card">
       <div className="row">
         <div className="course mode-line"><ModeIcon mode={round.mode} size={16} /> {label}</div>
@@ -225,7 +227,9 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
         )}
         <button className="btn ghost" aria-label="Forward one hole" disabled={busy || round.hole >= 18} onClick={() => go(round.hole + 1)}>+</button>
       </div>
-      <HoleStrip round={round} now={now} />
+    </div>
+    <ScoreCard round={round} now={now} pars={seq.map((h) => h.par)} />
+    <div className="list">
       <div className="actions">
         {round.hole < 18 && (
           <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish early</button>
@@ -237,6 +241,50 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
       )}
       {err && <p className="note err" role="alert">{err}</p>}
     </div>
+    </>
+  );
+}
+
+/** Your scorecard: a big -/+ pad for the selected hole, the running total, and the nine pills as the card. */
+function ScoreCard({ round, now, pars }: { round: Round; now: number; pars: number[] }) {
+  const [scores, setScores] = useState<Map<number, number>>(new Map());
+  const [sel, setSel] = useState(round.hole);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => setSel(round.hole), [round.hole]); // follow the golfer to each new hole
+  useEffect(() => {
+    getScores(round.id).then(setScores).catch((e) => setErr(e.message));
+  }, [round.id]);
+
+  const par = pars[sel - 1];
+  const val = scores.get(sel);
+  const sum = summarize(scores, pars);
+  function save(n: number) {
+    const strokes = Math.min(Math.max(n, 1), 20), prev = scores;
+    setScores(new Map(scores).set(sel, strokes)); // optimistic
+    setErr(null);
+    setScore(round.id, sel, strokes).catch((e) => (setScores(prev), setErr(`Couldn't save that score: ${e.message}`)));
+  }
+
+  return (
+    <section className="card scorecard" aria-label="Scorecard">
+      <div className="row-between">
+        <span className="label">Score</span>
+        <span className="score-total">
+          {sum.thru ? <><b>{fmtToPar(sum.toPar)}</b> · {sum.strokes} thru {sum.thru}</> : "Tap the number for par"}
+        </span>
+      </div>
+      <div className="score-pad">
+        <button className="pad-btn" aria-label="One fewer stroke" onClick={() => save((val ?? par) - 1)}>−</button>
+        <button className={`pad-val${val == null ? " unset" : ""}`} onClick={() => val == null && save(par)}
+          aria-label={val == null ? `Hole ${sel}: tap to enter par` : `Hole ${sel}: ${val} strokes`}>
+          <b>{val ?? par}</b>
+          <span>Hole {sel} · Par {par}</span>
+        </button>
+        <button className="pad-btn" aria-label="One more stroke" onClick={() => save((val ?? par) + 1)}>+</button>
+      </div>
+      <HoleStrip round={round} now={now} scores={scores} pars={pars} selected={sel} onSelect={setSel} />
+      {err && <p className="note err" role="alert">{err}</p>}
+    </section>
   );
 }
 
