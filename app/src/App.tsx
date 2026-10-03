@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { supabaseConfigured } from "./lib/supabase";
 import { initDeepLinks } from "./lib/native";
 import { useAction, useLiveData, useNow, useSession } from "./lib/hooks";
@@ -9,7 +9,6 @@ import { playSequence } from "./lib/courses";
 import { useRoundTracker } from "./lib/tracker";
 import { StopConfirm } from "./components/RoundView";
 import { MapView, type CourseOverlay, type MapFocus, type MapPin } from "./components/MapView";
-import { PlayHole, type GameView } from "./screens/PlayHole";
 import { Sheet, type Detent } from "./components/Sheet";
 import { SignIn } from "./screens/SignIn";
 import { People, RoundDetail } from "./screens/People";
@@ -18,6 +17,11 @@ import { Me } from "./screens/Me";
 
 type Tab = "people" | "round" | "me";
 
+// The 3D hole game (three.js) only downloads when someone taps Play.
+const HoleGame = lazy(() => import("./game3d/HoleGame"));
+// Dev-only playground (?demo=game&hole=N); import.meta.env.DEV strips it from builds.
+const Demo = import.meta.env.DEV ? lazy(() => import("./game3d/Demo")) : null;
+
 export default function App() {
   const session = useSession();
   const now = useNow();
@@ -25,6 +29,9 @@ export default function App() {
   const clearInvite = useCallback(() => setInvite(null), []);
 
   useEffect(() => initDeepLinks(setInvite), []);
+
+  if (Demo && new URLSearchParams(location.search).get("demo") === "game")
+    return <Suspense fallback={<div className="hg-loading">Loading the course…</div>}><Demo /></Suspense>;
 
   if (!supabaseConfigured)
     return (
@@ -54,7 +61,6 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const [sheetPx, setSheetPx] = useState(0);
   const [recenter, setRecenter] = useState(0);
   const [game, setGame] = useState<number | null>(null); // hole being played on the selected round
-  const [gameView, setGameView] = useState<GameView | null>(null);
 
   const rounds = useMemo(() => visibleRounds(data.rounds, now), [data.rounds, now]);
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
@@ -110,13 +116,11 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   // The course on the map: whoever's selected, else your own live round on the Round tab.
   const focusRound = sel ?? (tab === "round" ? live : undefined);
   const course: CourseOverlay | null = useMemo(() => {
-    if (gameHole) return { seq: [gameHole], current: gameHole.n, finished: false };
     const info = focusRound && roundInfo(focusRound, data.courses.get(focusRound.course_id), now);
     return info ? { seq: info.seq, current: focusRound!.status === "live" ? focusRound!.hole : 0, finished: focusRound!.status !== "live" } : null;
-  }, [focusRound, data.courses, now, gameHole]);
+  }, [focusRound, data.courses, now]);
 
   const focus: MapFocus = (() => {
-    if (gameView) return gameView.focus;
     const key = `${tab}|${focusRound?.id ?? ""}|${data.loaded}|${pins.length > 0}|${course ? 1 : 0}|${recenter}`;
     // Live: frame the hole they're on. Otherwise the whole course.
     if (course) {
@@ -144,16 +148,14 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     if (t !== "people" && detent === "peek") setDetent("mid");
   }
 
-  const title = gameHole
-    ? `Play hole ${gameHole.n}`
-    : sel
+  const title = sel
     ? sel.user_id === me ? "Your round" : data.profiles.get(sel.user_id)?.display_name || "Golfer"
     : tab === "people" ? "People" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Me";
 
   const header = (
     <div className="sheet-head">
       {sel && (
-        <button className="icon-btn" aria-label={game ? "Back to the round" : "Back to people"} onClick={() => (game ? setGame(null) : setSelected(null))}>
+        <button className="icon-btn" aria-label="Back to people" onClick={() => setSelected(null)}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="m15 6-6 6 6 6" /></svg>
         </button>
       )}
@@ -168,18 +170,16 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   return (
     <div className="app">
-      <MapView pins={gameHole ? [] : pins} course={course} game={gameHole ? gameView?.overlay : null} focus={focus} bottomPad={sheetPx} onPin={openRound} />
-      {!gameHole && <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
+      <MapView pins={pins} course={course} focus={focus} bottomPad={sheetPx} onPin={openRound} />
+      <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20.5 3.5 3.8 10.6c-.9.4-.8 1.7.2 1.9l6.6 1.2 1.3 6.6c.2 1 1.5 1.1 1.9.2L20.5 3.5z" /></svg>
-      </button>}
+      </button>
       {live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
       {data.error && <p className="toast err" role="alert">Couldn't refresh: {data.error}</p>}
 
-      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header} view={gameHole ? `game-${gameHole.n}` : sel?.id ?? tab}>
-        {sel && gameHole ? (
-          <PlayHole round={sel} hole={gameHole} data={data} me={me} onView={setGameView} />
-        ) : sel ? (
-          <RoundDetail round={sel} data={data} me={me} now={now} onPlay={(n) => (setGame(n), setDetent("mid"))} />
+      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header} view={sel?.id ?? tab}>
+        {sel ? (
+          <RoundDetail round={sel} data={data} me={me} now={now} onPlay={setGame} />
         ) : tab === "people" ? (
           <People data={data} me={me} now={now} rounds={rounds} onOpen={openRound} onAddFriends={() => (go("me"), setDetent("full"))} />
         ) : tab === "round" ? (
@@ -200,6 +200,25 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
           <path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm-8 8.5C4 16.9 7.6 14.5 12 14.5s8 2.4 8 6V21H4v-.5z" />
         </TabButton>
       </nav>
+
+      {sel && gameHole && (
+        <Suspense fallback={<div className="hg-loading">Loading the course…</div>}>
+          <HoleGame
+            roundId={sel.id}
+            hole={gameHole}
+            me={me}
+            owner={{
+              id: sel.user_id,
+              name: sel.user_id === me ? "You" : data.profiles.get(sel.user_id)?.display_name || "Golfer",
+              score: data.scores.get(sel.id)?.get(gameHole.n),
+            }}
+            plays={data.plays}
+            profiles={data.profiles}
+            onSaved={data.reload}
+            onClose={() => setGame(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
