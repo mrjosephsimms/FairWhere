@@ -172,6 +172,20 @@ export async function getScores(roundId: string): Promise<Map<number, number>> {
   return new Map(rows.map((r) => [r.hole, r.strokes]));
 }
 
+/** Scorecards for several rounds (yours, and friends' you can see): round id -> hole -> strokes. */
+export async function getScoresFor(roundIds: string[]): Promise<Map<string, Map<number, number>>> {
+  const out = new Map<string, Map<number, number>>();
+  if (!roundIds.length) return out;
+  const rows: { round_id: string; hole: number; strokes: number }[] = check(
+    await supabase.from("round_scores").select("round_id, hole, strokes").in("round_id", roundIds),
+  );
+  for (const r of rows) {
+    if (!out.has(r.round_id)) out.set(r.round_id, new Map());
+    out.get(r.round_id)!.set(r.hole, r.strokes);
+  }
+  return out;
+}
+
 export async function setScore(roundId: string, hole: number, strokes: number) {
   check(await supabase.from("round_scores").upsert({ round_id: roundId, hole, strokes, updated_at: new Date().toISOString() }));
 }
