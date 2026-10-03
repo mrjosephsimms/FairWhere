@@ -35,6 +35,7 @@ export function SignIn() {
 
   return (
     <div className="card signin">
+      <h1>Find My <span>Golfer</span></h1>
       <p className="lede">See which hole your friends are on and when they'll be done. No more "where are you?" texts.</p>
       <button className="btn dark" disabled={busy} onClick={() => run(() => signInWithProvider("apple"))}>
         Continue with Apple
