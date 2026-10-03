@@ -11,15 +11,21 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
 - **Never run against the real Supabase project or on a device yet.** The cloud sandbox's
   network policy blocked `*.supabase.co`.
 
-## Supabase project (created by Sunny, still empty)
+## Supabase project — set up 2026-10-03 (local Mac session)
 - Project: **FindMyGolfer**, ref `uvyeenrkkvvsizszdizv`, URL `https://uvyeenrkkvvsizszdizv.supabase.co`,
-  us-east-1, free plan. Separate from SaleMap's project, as intended.
-- [ ] Apply migrations in order: `supabase/migrations/20261003000001_init.sql`, `…02_expire_stale_rounds.sql`,
-      `…03_seed_courses.sql` (SQL editor, or `supabase db push --db-url "<direct connection string>"`).
-      Then confirm in Table Editor: `courses` has 2 rows, and Database → Cron has `expire-stale-rounds`.
-- [ ] Auth → URL Configuration → Redirect URLs: `findmygolfer://auth-callback` and `http://localhost:5173`.
-- [ ] Auth → Emails → Magic Link template: add `{{ .Token }}` (the app accepts the link or the 6-digit code).
-- [ ] Create `app/.env` from `app/.env.example` with the project URL and the `sb_publishable_…` key.
+  us-east-1, free plan. Separate from SaleMap's project, as intended. Repo is `supabase link`ed.
+- [x] Migrations 01–03 applied with `supabase db push --linked`. Verified: 6 public tables all RLS-on,
+      `courses` = 2 rows, cron `expire-stale-rounds` (*/15) active, `rounds` + `friendships` in `supabase_realtime`.
+      (01 needed `pgcrypto` → `extensions` schema: hosted Supabase installs extensions there.)
+- [x] Auth config pushed from `supabase/config.toml` (`supabase config push`): site URL `http://localhost:5173`,
+      redirect URLs `findmygolfer://auth-callback` + `http://localhost:5173`, email OTP length 8 → 6.
+- [x] `app/.env` written (URL + `sb_publishable_…` key; gitignored, local to this Mac).
+- [ ] **Magic-link email with the 6-digit code**: template is ready at `supabase/templates/magic_link.html`, but the
+      free plan rejects template edits on Supabase's built-in mailer. Needs custom SMTP first (Auth → SMTP; e.g. a
+      Resend account of its own + a sending domain), then uncomment the block in `config.toml` and `supabase config push`.
+      Until then the stock email has only the link — sign in by tapping it.
+- ⚠️ Built-in mailer limits: it only delivers to members of the Supabase org and is rate-limited (a few emails/hour).
+  For the two-user test, sign in with addresses on the org (or invite the second address to the org) — or set up SMTP.
 
 ## First real test (do this before any new features)
 1. `cd app && npm install && npm run dev` → sign in by email on http://localhost:5173.

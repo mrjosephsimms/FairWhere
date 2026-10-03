@@ -8,7 +8,7 @@
 --   * Friend requests go through SECURITY DEFINER RPCs; nobody can insert a
 --     friendship row (or flip one to accepted) directly.
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- ---------------------------------------------------------------- profiles
 
@@ -219,7 +219,7 @@ $$;
 
 -- v1.1 web share page for non-users (table only; no policies = no client access yet).
 create table public.share_links (
-  token      text primary key default encode(gen_random_bytes(18), 'base64'),
+  token      text primary key default encode(extensions.gen_random_bytes(18), 'base64'),
   round_id   uuid not null references public.rounds (id) on delete cascade,
   expires_at timestamptz not null
 );

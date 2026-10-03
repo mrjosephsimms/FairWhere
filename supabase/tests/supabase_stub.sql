@@ -5,6 +5,7 @@ create role authenticated nologin;
 create role service_role nologin bypassrls;
 
 create schema auth;
+create schema extensions;  -- Supabase installs extensions (pgcrypto, ...) here
 create table auth.users (
   id uuid primary key default gen_random_uuid(),
   email text,
