@@ -2,8 +2,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import { removeFriendship, requestFriend, respondFriend, setDisplayName, type Friendship } from "../lib/db";
 import { useAction, type LiveData } from "../lib/hooks";
 import { shareInvite } from "../lib/native";
+import { supabase } from "../lib/supabase";
 
-export function Friends({ data, me, incomingCode, onCodeUsed }: {
+export function Me({ data, me, incomingCode, onCodeUsed }: {
   data: LiveData;
   me: string;
   incomingCode: string | null;
@@ -117,6 +118,9 @@ export function Friends({ data, me, incomingCode, onCodeUsed }: {
           </div>
         ))}
       </section>
+
+      <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
+      <p className="note center">Course data © OpenStreetMap contributors (ODbL) · Map © OpenFreeMap</p>
     </div>
   );
 }

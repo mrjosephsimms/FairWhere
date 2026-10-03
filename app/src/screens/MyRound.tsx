@@ -4,7 +4,7 @@ import { endRound, listCourses, setHole, startRound, type Round } from "../lib/d
 import { useAction, type LiveData } from "../lib/hooks";
 import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
-import { CourseMap, HoleStrip, PaceChip, StopConfirm } from "../components/RoundView";
+import { HoleStrip, PaceChip, StopConfirm } from "../components/RoundView";
 
 const PACES = [
   [225, "3h 45m"],
@@ -164,7 +164,7 @@ function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: nu
   const { busy, err, run } = useAction(data.reload);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <div className="card empty">Loading course…</div>;
-  const { est, hole, label, seq } = info;
+  const { est, hole, label } = info;
   const go = (n: number) => n >= 1 && n <= 18 && n !== round.hole && run(() => setHole(round.id, n));
 
   return (
@@ -190,7 +190,6 @@ function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: nu
         <button className="btn ghost" aria-label="Forward one hole" disabled={busy || round.hole >= 18} onClick={() => go(round.hole + 1)}>+</button>
       </div>
       <HoleStrip round={round} now={now} />
-      <CourseMap seq={seq} round={round} est={est} />
       <div className="actions">
         {round.hole < 18 && (
           <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish early</button>
