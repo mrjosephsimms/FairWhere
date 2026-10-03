@@ -228,7 +228,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
         <button className="btn ghost" aria-label="Forward one hole" disabled={busy || round.hole >= 18} onClick={() => go(round.hole + 1)}>+</button>
       </div>
     </div>
-    <ScoreCard round={round} now={now} pars={seq.map((h) => h.par)} />
+    <ScoreCard round={round} now={now} pars={seq.map((h) => h.par)} data={data} />
     <div className="list">
       <div className="actions">
         {round.hole < 18 && (
@@ -246,7 +246,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
 }
 
 /** Your scorecard: a big -/+ pad for the selected hole, the running total, and the nine pills as the card. */
-function ScoreCard({ round, now, pars }: { round: Round; now: number; pars: number[] }) {
+function ScoreCard({ round, now, pars, data }: { round: Round; now: number; pars: number[]; data: LiveData }) {
   const [scores, setScores] = useState<Map<number, number>>(new Map());
   const [sel, setSel] = useState(round.hole);
   const [err, setErr] = useState<string | null>(null);
@@ -283,6 +283,7 @@ function ScoreCard({ round, now, pars }: { round: Round; now: number; pars: numb
         <button className="pad-btn" aria-label="One more stroke" onClick={() => save((val ?? par) + 1)}>+</button>
       </div>
       <HoleStrip round={round} now={now} scores={scores} pars={pars} selected={sel} onSelect={setSel} />
+      <Challengers round={round} scores={scores} data={data} />
       {err && <p className="note err" role="alert">{err}</p>}
     </section>
   );
@@ -294,4 +295,22 @@ function gpsLine(gps: GpsState): string {
   if (gps.status === "unavailable") return "No GPS on this device";
   if (gps.status === "on" && !gps.pos) return "Off the course";
   return gps.fix ? `GPS ±${Math.round(gps.fix.acc)} m` : "";
+}
+
+/**
+ * One quiet line about friends playing your holes at home (no alerts, by design):
+ * "🎮 Mary played 3 of your holes · beat you on 1".
+ */
+function Challengers({ round, scores, data }: { round: Round; scores: Map<number, number>; data: LiveData }) {
+  const plays = data.plays.filter((p) => p.round_id === round.id && p.player_id !== round.user_id);
+  if (!plays.length) return null;
+  const players = [...new Set(plays.map((p) => p.player_id))];
+  const holes = new Set(plays.map((p) => p.hole)).size;
+  const beat = new Set(plays.filter((p) => scores.has(p.hole) && p.strokes < scores.get(p.hole)!).map((p) => p.hole)).size;
+  const who = players.length === 1 ? data.profiles.get(players[0])?.display_name || "A friend" : `${players.length} friends`;
+  return (
+    <p className="challengers">
+      🎮 {who} played {holes === 1 ? "1 of your holes" : `${holes} of your holes`}{beat ? ` · beat you on ${beat}` : ""}
+    </p>
+  );
 }
