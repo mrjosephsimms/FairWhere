@@ -2,10 +2,11 @@
 // selected round's course drawn from the hole centerlines. MapLibre + OpenFreeMap
 // (keyless); the globe button flips to Esri satellite imagery.
 import { useEffect, useRef, useState } from "react";
-import maplibregl, { type GeoJSONSourceSpecification, type Map as MLMap, type Marker, type StyleSpecification } from "maplibre-gl";
+import maplibregl, { type ExpressionSpecification, type Map as MLMap, type Marker, type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { PlayHole } from "../lib/courses";
 import { colorFor, initials } from "./Avatar";
+import { courseFeatures } from "../lib/courseShapes";
 
 const LIGHT = "https://tiles.openfreemap.org/styles/liberty";
 const SATELLITE: StyleSpecification = {
@@ -126,7 +127,7 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
     if (!m || !f) return;
     // Keep at least ~120px of map between the paddings, or MapLibre refuses to fit at all.
     const { clientWidth: w, clientHeight: h } = m.getContainer();
-    const top = 80, bottom = Math.max(20, Math.min(bottomPad + 24, h - top - 120));
+    const top = 96, bottom = Math.max(20, Math.min(bottomPad + 24, h - top - 120));
     const side = Math.max(10, Math.min(56, (w - 120) / 2));
     const padding = { top, bottom, left: side, right: side };
     // Always fitBounds: flyTo({padding}) would store the padding on the map and every later
@@ -152,36 +153,82 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
   );
 }
 
-const STATE = (o: CourseOverlay, n: number) => (o.finished || n < o.current ? "past" : n === o.current ? "now" : "next");
+// ------------------------------------------------------------------ course paths
+
+const PAST = "#1f8a4c", NOW = "#e5484d", NEXT = "#8f9a92";
+const byState = (past: string, now: string, next: string, up = now): ExpressionSpecification =>
+  ["match", ["get", "state"], "past", past, "now", now, "up", up, next];
+const LAYERS = ["c-flag", "c-tee-num", "c-tee", "c-link-arrow", "c-arrows", "c-line", "c-casing", "c-link", "c-halo"];
+
+/** Small icons drawn once per style as signed-distance images, so layers can tint them. */
+function ensureIcons(m: MLMap) {
+  const make = (w: number, h: number, draw: (c: CanvasRenderingContext2D) => void) => {
+    const cv = document.createElement("canvas");
+    cv.width = w * 2; cv.height = h * 2;
+    const c = cv.getContext("2d")!;
+    c.scale(2, 2);
+    c.fillStyle = c.strokeStyle = "#000";
+    draw(c);
+    return c.getImageData(0, 0, w * 2, h * 2);
+  };
+  if (!m.hasImage("fmg-chevron"))
+    m.addImage("fmg-chevron", make(16, 16, (c) => {
+      c.lineWidth = 3; c.lineCap = c.lineJoin = "round";
+      c.beginPath(); c.moveTo(5, 3.5); c.lineTo(11, 8); c.lineTo(5, 12.5); c.stroke();
+    }), { sdf: true, pixelRatio: 2 });
+  if (!m.hasImage("fmg-flag"))
+    m.addImage("fmg-flag", make(18, 26, (c) => {
+      c.lineWidth = 2; c.lineCap = "round";
+      c.beginPath(); c.moveTo(4, 24); c.lineTo(4, 3); c.stroke();
+      c.beginPath(); c.moveTo(4, 2.5); c.lineTo(16, 7); c.lineTo(4, 11.5); c.closePath(); c.fill();
+      c.beginPath(); c.ellipse(4, 24, 3, 1.4, 0, 0, Math.PI * 2); c.fill();
+    }), { sdf: true, pixelRatio: 2 });
+}
 
 function drawCourse(m: MLMap, o: CourseOverlay | null | undefined) {
-  for (const id of ["course-num", "course-green", "course-line", "course-casing"]) if (m.getLayer(id)) m.removeLayer(id);
+  for (const id of LAYERS) if (m.getLayer(id)) m.removeLayer(id);
   if (m.getSource("course")) m.removeSource("course");
   if (!o) return;
-  const lngLat = (p: [number, number]) => [p[1], p[0]];
-  const data: GeoJSONSourceSpecification["data"] = {
-    type: "FeatureCollection",
-    features: o.seq.flatMap((h) => {
-      const props = { n: h.n, state: STATE(o, h.n) };
-      const green = h.green?.center ?? h.centerline[h.centerline.length - 1];
-      return [
-        { type: "Feature" as const, properties: props, geometry: { type: "LineString" as const, coordinates: h.centerline.map(lngLat) } },
-        { type: "Feature" as const, properties: { ...props, kind: "green" }, geometry: { type: "Point" as const, coordinates: lngLat(green) } },
-        { type: "Feature" as const, properties: { ...props, kind: "tee" }, geometry: { type: "Point" as const, coordinates: lngLat(h.centerline[0]) } },
-      ];
-    }),
-  };
-  const color = ["match", ["get", "state"], "now", "#e5484d", "past", "#1f8a4c", "#7c8a80"] as unknown as string;
-  m.addSource("course", { type: "geojson", data });
-  m.addLayer({ id: "course-casing", type: "line", source: "course", filter: ["==", ["geometry-type"], "LineString"],
-    layout: { "line-cap": "round", "line-join": "round" },
-    paint: { "line-color": "#ffffff", "line-width": ["match", ["get", "state"], "now", 9, 6], "line-opacity": 0.9 } });
-  m.addLayer({ id: "course-line", type: "line", source: "course", filter: ["==", ["geometry-type"], "LineString"],
-    layout: { "line-cap": "round", "line-join": "round" },
-    paint: { "line-color": color, "line-width": ["match", ["get", "state"], "now", 5, 3] } });
-  m.addLayer({ id: "course-green", type: "circle", source: "course", filter: ["==", ["get", "kind"], "green"],
-    paint: { "circle-color": color, "circle-radius": ["match", ["get", "state"], "now", 6, 4], "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
-  m.addLayer({ id: "course-num", type: "symbol", source: "course", filter: ["==", ["get", "kind"], "tee"],
-    layout: { "text-field": ["to-string", ["get", "n"]], "text-font": ["Noto Sans Bold"], "text-size": ["match", ["get", "state"], "now", 15, 12], "text-offset": [0, -0.9], "text-allow-overlap": true },
-    paint: { "text-color": color, "text-halo-color": "#fff", "text-halo-width": 1.6 } });
+  ensureIcons(m);
+  m.addSource("course", { type: "geojson", data: courseFeatures(o.seq, o.current, o.finished) });
+  const holes: ExpressionSpecification = ["==", ["get", "kind"], "hole"];
+  const links: ExpressionSpecification = ["==", ["get", "kind"], "link"];
+  const isNow: ExpressionSpecification = ["==", ["get", "state"], "now"];
+  const round = { "line-cap": "round", "line-join": "round" } as const;
+
+  // Soft glow under the hole being played.
+  m.addLayer({ id: "c-halo", type: "line", source: "course", filter: ["all", holes, isNow], layout: round,
+    paint: { "line-color": NOW, "line-width": 24, "line-opacity": 0.2, "line-blur": 5 } });
+  // Dotted walk from each green to the next tee.
+  m.addLayer({ id: "c-link", type: "line", source: "course", filter: links, layout: round,
+    paint: { "line-color": byState(PAST, PAST, NEXT, NOW), "line-width": ["match", ["get", "state"], "up", 3.6, 2.8],
+      "line-dasharray": [0.1, 2], "line-opacity": ["match", ["get", "state"], "up", 1, "next", 0.9, 0.7] } });
+  // The holes: white casing, then the coloured path.
+  m.addLayer({ id: "c-casing", type: "line", source: "course", filter: holes, layout: round,
+    paint: { "line-color": "#ffffff", "line-width": ["case", isNow, 13, 10], "line-opacity": 0.95 } });
+  m.addLayer({ id: "c-line", type: "line", source: "course", filter: holes, layout: round,
+    paint: { "line-color": byState(PAST, NOW, NEXT), "line-width": ["case", isNow, 9, 6.5] } });
+  // Chevrons riding along each hole in the direction of play.
+  m.addLayer({ id: "c-arrows", type: "symbol", source: "course", filter: holes,
+    layout: { "symbol-placement": "line", "symbol-spacing": 56, "icon-image": "fmg-chevron", "icon-size": ["case", isNow, 0.95, 0.75],
+      "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-rotation-alignment": "map" },
+    paint: { "icon-color": "#ffffff" } });
+  // One arrow mid-walk pointing at the next tee.
+  m.addLayer({ id: "c-link-arrow", type: "symbol", source: "course", filter: links,
+    layout: { "symbol-placement": "line-center", "icon-image": "fmg-chevron", "icon-size": ["match", ["get", "state"], "up", 1.35, 1.05],
+      "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-rotation-alignment": "map" },
+    paint: { "icon-color": byState(PAST, PAST, NEXT, NOW), "icon-halo-color": "#ffffff", "icon-halo-width": 2 } });
+  // Tee badges with the hole number.
+  m.addLayer({ id: "c-tee", type: "circle", source: "course", filter: ["==", ["get", "kind"], "tee"],
+    paint: { "circle-radius": ["case", isNow, 11, 8.5], "circle-color": byState(PAST, NOW, NEXT),
+      "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+  m.addLayer({ id: "c-tee-num", type: "symbol", source: "course", filter: ["==", ["get", "kind"], "tee"],
+    layout: { "text-field": ["to-string", ["get", "n"]], "text-font": ["Noto Sans Bold"], "text-size": ["case", isNow, 12, 10],
+      "text-allow-overlap": true, "text-ignore-placement": true },
+    paint: { "text-color": "#ffffff" } });
+  // A little flag on every green.
+  m.addLayer({ id: "c-flag", type: "symbol", source: "course", filter: ["==", ["get", "kind"], "green"],
+    layout: { "icon-image": "fmg-flag", "icon-anchor": "bottom-left", "icon-offset": [-4, 2], "icon-size": ["case", isNow, 1, 0.75],
+      "icon-allow-overlap": true, "icon-ignore-placement": true },
+    paint: { "icon-color": byState(PAST, NOW, "#5f6b63"), "icon-halo-color": "#ffffff", "icon-halo-width": 1.2 } });
 }
