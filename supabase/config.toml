@@ -1,0 +1,6 @@
+# Supabase CLI config (local dev / `supabase link`). The hosted project's settings live in its dashboard.
+project_id = "find-my-golfer"
+
+[auth]
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["findmygolfer://auth-callback", "http://localhost:5173"]

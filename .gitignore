@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+*.env
+!.env.example
+.DS_Store
+*.tsbuildinfo
+supabase/.temp/
+supabase/.branches/
+.apple/
+*.p8
