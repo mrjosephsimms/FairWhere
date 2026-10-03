@@ -20,12 +20,10 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
 - [x] Auth config pushed from `supabase/config.toml` (`supabase config push`): site URL `http://localhost:5180`,
       redirect URLs `findmygolfer://auth-callback` + `http://localhost:5180` (+ `/**`), email OTP length 8 → 6.
 - [x] `app/.env` written (URL + `sb_publishable_…` key; gitignored, local to this Mac).
-- [ ] **Magic-link email with the 6-digit code**: template is ready at `supabase/templates/magic_link.html`, but the
-      free plan rejects template edits on Supabase's built-in mailer. Needs custom SMTP first (Auth → SMTP; e.g. a
-      Resend account of its own + a sending domain), then uncomment the block in `config.toml` and `supabase config push`.
-      Until then the stock email has only the link — sign in by tapping it.
-- ⚠️ Built-in mailer limits: it only delivers to members of the Supabase org and is rate-limited (a few emails/hour).
-  For the two-user test, sign in with addresses on the org (or invite the second address to the org) — or set up SMTP.
+- [x] Custom SMTP (Gmail app password, mrjosephsimms@gmail.com) set in the dashboard by Sunny; email rate limit 30/h.
+- [x] Magic-link email with the 6-digit code pushed (`supabase/templates/magic_link.html`). Use the code when the
+      email is opened on a different device than the one that asked for it (links only work in the same browser).
+- [x] Phone testing: redirect allow-list includes the Mac's Tailscale URL `http://100.111.147.89:5180/**`.
 
 ## First real test (do this before any new features)
 1. `cd app && npm install && npm run dev` → sign in by email on http://localhost:5180.
