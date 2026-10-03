@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocate, DEFAULT_TARGET, estimate, paceChip, switchTarget, type PaceInput } from "./pace";
+import { allocate, DEFAULT_TARGET, estimate, paceChip, type PaceInput } from "./pace";
 import { playSequence } from "./courses";
 import { course } from "./fixtures";
 
@@ -44,19 +44,6 @@ describe("walking vs riding", () => {
     const ride = estimate(base({ teeTime: now + MIN, targetMinutes: DEFAULT_TARGET.riding, mode: "riding" }), now);
     const walk = estimate(base({ teeTime: now + MIN, targetMinutes: DEFAULT_TARGET.walking, mode: "walking", yards }), now);
     expect((walk.eta - ride.eta) / MIN).toBe(DEFAULT_TARGET.walking - DEFAULT_TARGET.riding);
-  });
-
-  it("switching mode mid-round rescales the target, clamped to the DB range", () => {
-    expect(switchTarget(240, "riding", "walking")).toBe(270);
-    expect(switchTarget(270, "walking", "riding")).toBe(240);
-    expect(switchTarget(400, "riding", "walking")).toBe(420);
-  });
-
-  it("picking up a cart mid-round brings the ETA in", () => {
-    const at = { hole: 10, holeStartedAt: now - 5 * MIN, teeTime: now - 130 * MIN, yards };
-    const walking = estimate(base({ ...at, mode: "walking", targetMinutes: 270 }), now);
-    const riding = estimate(base({ ...at, mode: "riding", targetMinutes: switchTarget(270, "walking", "riding") }), now);
-    expect(riding.eta).toBeLessThan(walking.eta);
   });
 });
 

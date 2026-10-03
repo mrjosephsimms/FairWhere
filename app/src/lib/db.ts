@@ -33,6 +33,8 @@ export interface Round {
   status: "live" | "done" | "cancelled";
   visibility: "friends" | "selected";
   mode: Mode;
+  /** Set while the golfer seems to be hunting for a ball (lib/onCourse.ts). */
+  searching_since: string | null;
   finished_at: string | null;
   updated_at: string;
 }
@@ -154,9 +156,12 @@ export async function setHole(id: string, hole: number) {
   );
 }
 
-/** Walking <-> riding mid-round; the usual-pace target moves with it so the ETA follows. */
-export async function setMode(id: string, mode: Mode, targetMinutes: number) {
-  check(await supabase.from("rounds").update({ mode, target_minutes: targetMinutes }).eq("id", id));
+/** Live GPS: position, progress along the hole, ball hunt, and (on auto-advance) the hole. */
+export async function updateRoundPosition(
+  id: string,
+  patch: Partial<Pick<Round, "last_lat" | "last_lng" | "last_fix_at" | "hole_fraction" | "searching_since" | "hole" | "hole_started_at">>,
+) {
+  check(await supabase.from("rounds").update(patch).eq("id", id).eq("status", "live"));
 }
 
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */

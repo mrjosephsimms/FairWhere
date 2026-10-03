@@ -5,6 +5,8 @@ import { useAction, useLiveData, useNow, useSession } from "./lib/hooks";
 import { endRound } from "./lib/db";
 import { roundInfo, visibleRounds } from "./lib/roundInfo";
 import { courseBounds, roundPosition } from "./lib/geo";
+import { playSequence } from "./lib/courses";
+import { useRoundTracker } from "./lib/tracker";
 import { StopConfirm } from "./components/RoundView";
 import { MapView, type CourseOverlay, type MapFocus, type MapPin } from "./components/MapView";
 import { Sheet, type Detent } from "./components/Sheet";
@@ -56,6 +58,19 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const incoming = data.friendships.filter((f) => f.status === "pending" && f.friend_id === me).length;
   const sel = selected ? rounds.find((r) => r.id === selected) : undefined;
 
+  // Live GPS for your own round. The course object is cached in db.ts, so `seq` stays
+  // stable across refreshes and the location watch isn't restarted.
+  const liveCourse = live ? data.courses.get(live.course_id) : undefined;
+  const liveNines = live?.nines?.join("|");
+  const liveSeq = useMemo(() => {
+    try {
+      return liveCourse ? playSequence(liveCourse, liveNines ? liveNines.split("|") : null) : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [liveCourse, liveNines]);
+  const gps = useRoundTracker(live, liveSeq);
+
   useEffect(() => {
     if (invite) (setTab("me"), setDetent("full"));
   }, [invite]);
@@ -67,13 +82,14 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     () =>
       rounds.flatMap((r) => {
         const info = roundInfo(r, data.courses.get(r.course_id), now);
-        const pos = info && roundPosition(r, info.seq, info.est, now);
+        // Your own pin follows this phone's GPS directly, without waiting for a write.
+        const pos = r.id === live?.id && gps.fix ? gps.fix.pt : info && roundPosition(r, info.seq, info.est, now);
         if (!info || !pos) return [];
         const name = data.profiles.get(r.user_id)?.display_name || "Golfer";
         return [{ id: r.id, lat: pos[0], lng: pos[1], name, me: r.user_id === me, selected: r.id === selected,
           badge: info.est.phase === "live" ? String(r.hole) : undefined }];
       }),
-    [rounds, data.courses, data.profiles, now, me, selected],
+    [rounds, data.courses, data.profiles, now, me, selected, live?.id, gps.fix],
   );
 
   // The course on the map: whoever's selected, else your own live round on the Round tab.
@@ -141,7 +157,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         ) : tab === "people" ? (
           <People data={data} me={me} now={now} rounds={rounds} onOpen={openRound} onAddFriends={() => (go("me"), setDetent("full"))} />
         ) : tab === "round" ? (
-          <MyRound data={data} me={me} now={now} />
+          <MyRound data={data} me={me} now={now} gps={gps} />
         ) : (
           <Me data={data} me={me} incomingCode={invite} onCodeUsed={clearInvite} />
         )}

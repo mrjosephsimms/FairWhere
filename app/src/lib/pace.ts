@@ -11,15 +11,6 @@ export type Mode = "walking" | "riding";
 /** Default usual round length (minutes): walkers typically take 20-30 min longer than a cart. */
 export const DEFAULT_TARGET: Record<Mode, number> = { riding: 240, walking: 270 };
 
-/**
- * Rescale a usual-pace target when the golfer switches mode mid-round
- * (e.g. 4:00 riding -> 4:30 walking), kept within the DB's 120..420 range.
- */
-export function switchTarget(targetMinutes: number, from: Mode, to: Mode): number {
-  const t = Math.round((targetMinutes * DEFAULT_TARGET[to]) / DEFAULT_TARGET[from]);
-  return Math.min(Math.max(t, 120), 420);
-}
-
 /** Share of a walker's hole time that scales with the hole's length rather than its par. */
 const WALK_YARDS_SHARE = 0.35;
 
