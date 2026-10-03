@@ -226,6 +226,8 @@ reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 set role authenticated;
 select pg_temp.ok((select count(*) = 2 from public.courses), 'signed-in users read courses');
+select pg_temp.ok((select bool_and(jsonb_array_length(features->'bunkers') > 0 and jsonb_array_length(features->'water') > 0) from public.courses),
+  'signed-in users read mapped course features (bunkers, water)');
 select pg_temp.fails($$insert into public.courses (id, name, data) values ('x', 'x', '{}')$$, 'clients cannot write courses');
 select pg_temp.fails($$select * from public.share_links$$ || ' where false; insert into public.share_links (round_id, expires_at) select id, now() from public.rounds',
   'clients cannot create share links');
