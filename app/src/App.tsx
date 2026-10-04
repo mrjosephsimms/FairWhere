@@ -15,6 +15,7 @@ import { People, RoundDetail } from "./screens/People";
 import { MyRound } from "./screens/MyRound";
 import { Me } from "./screens/Me";
 import { AddPeople } from "./screens/AddPeople";
+import { AlertSettings, Inbox, NoteBanner, PersonCard } from "./screens/Alerts";
 
 type Tab = "people" | "round" | "me";
 
@@ -64,6 +65,9 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const [game, setGame] = useState<number | null>(null); // hole being played on the selected round
   const [adding, setAdding] = useState(false); // the "Add people" sheet (the + on People)
   const [search, setSearch] = useState<string | null>(null); // People search box (null = closed)
+  const [person, setPerson] = useState<string | null>(null); // a friend's page when they aren't playing
+  const [alertsFor, setAlertsFor] = useState<string | null>(null); // the bell: alert settings for this friend
+  const [inbox, setInbox] = useState(false); // your alerts list
 
   const rounds = useMemo(() => visibleRounds(data.rounds, now), [data.rounds, now]);
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
@@ -138,23 +142,41 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     return { key };
   })();
 
-  function openRound(id: string) {
+  /** Leave any sub-page (round, person, alerts, inbox, add people). */
+  function closePages() {
+    setSelected(null);
     setGame(null);
     setAdding(false);
+    setPerson(null);
+    setAlertsFor(null);
+    setInbox(false);
+  }
+  function openRound(id: string) {
+    closePages();
     setSelected(id);
     setTab("people");
     setDetent("mid");
   }
   function go(t: Tab) {
     setTab(t);
-    setSelected(null);
-    setGame(null);
-    setAdding(false);
+    closePages();
     if (t !== "people" && detent === "peek") setDetent("mid");
   }
 
-  const openAdding = () => (setSelected(null), setAdding(true), setDetent("full"));
-  const title = adding
+  const openAdding = () => (closePages(), setAdding(true), setDetent("full"));
+  const openPerson = (id: string) => (closePages(), setPerson(id), setDetent("mid"));
+  const openInbox = () => (closePages(), setInbox(true), setDetent("full"));
+  // Whose page we're on (for the bell): a friend's round, or a friend who isn't playing.
+  const pageOf = sel && sel.user_id !== me ? sel.user_id : person;
+  const watching = (id: string | null) => !!id && data.watches.some((w) => w.watcher_id === me && w.golfer_id === id);
+  const unread = data.notes.filter((n) => !n.read_at).length;
+  const title = alertsFor
+    ? `Alerts · ${data.profiles.get(alertsFor)?.display_name || "Golfer"}`
+    : inbox
+    ? "Notifications"
+    : person
+    ? data.profiles.get(person)?.display_name || "Golfer"
+    : adding
     ? "Add people"
     : sel
     ? sel.user_id === me ? "Your round" : data.profiles.get(sel.user_id)?.display_name || "Golfer"
@@ -162,19 +184,28 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   const header = (
     <div className="sheet-head">
-      {(sel || adding) && (
-        <button className="icon-btn" aria-label="Back to people" onClick={() => (setSelected(null), setAdding(false))}>
+      {(sel || adding || person || inbox || alertsFor) && (
+        <button className="icon-btn" aria-label="Back" onClick={() => (alertsFor ? setAlertsFor(null) : closePages())}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="m15 6-6 6 6 6" /></svg>
         </button>
       )}
-      {tab === "people" && !sel && !adding && search !== null ? (
+      {tab === "people" && !sel && !adding && !person && !inbox && search !== null ? (
         <input className="search" autoFocus value={search} placeholder="Search name or @username" aria-label="Search people"
           onChange={(e) => setSearch(e.target.value)} />
       ) : (
         <h2>{title}</h2>
       )}
-      {tab === "people" && !sel && !adding && (
+      {pageOf && !alertsFor && (
+        <button className={`icon-btn${watching(pageOf) ? " on" : ""}`} aria-label="Alerts for this person" onClick={() => (setAlertsFor(pageOf), setDetent("full"))}>
+          <BellIcon filled={watching(pageOf)} />
+        </button>
+      )}
+      {tab === "people" && !sel && !adding && !person && !inbox && (
         <>
+          <button className="icon-btn bell" aria-label={unread ? `${unread} new alerts` : "Notifications"} onClick={openInbox}>
+            <BellIcon />
+            {unread > 0 && <i className="dot-badge">{unread}</i>}
+          </button>
           <button className="icon-btn" aria-label={search !== null ? "Close search" : "Search people"} onClick={() => setSearch(search !== null ? null : "")}>
             {search !== null ? (
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M6 6l12 12M18 6 6 18" /></svg>
@@ -198,14 +229,22 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       </button>
       {live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
       {data.error && <p className="toast err" role="alert">Couldn't refresh: {data.error}</p>}
+      <NoteBanner data={data} onOpen={(n) => (rounds.some((r) => r.id === n.round_id) ? openRound(n.round_id) : openInbox())} />
 
-      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header} view={adding ? "adding" : sel?.id ?? tab}>
-        {adding ? (
+      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header}
+        view={alertsFor ? `alerts-${alertsFor}` : inbox ? "inbox" : person ? `person-${person}` : adding ? "adding" : sel?.id ?? tab}>
+        {alertsFor ? (
+          <AlertSettings data={data} me={me} golferId={alertsFor} />
+        ) : inbox ? (
+          <Inbox data={data} onOpen={(id) => rounds.some((r) => r.id === id) && openRound(id)} />
+        ) : person ? (
+          <PersonCard data={data} me={me} id={person} onAlerts={() => (setAlertsFor(person), setDetent("full"))} />
+        ) : adding ? (
           <AddPeople data={data} me={me} incomingCode={invite} onCodeUsed={clearInvite} />
         ) : sel ? (
           <RoundDetail round={sel} data={data} me={me} now={now} onPlay={setGame} />
         ) : tab === "people" ? (
-          <People data={data} me={me} now={now} rounds={rounds} query={search ?? ""} onOpen={openRound} onAddPeople={openAdding} />
+          <People data={data} me={me} now={now} rounds={rounds} query={search ?? ""} onOpen={openRound} onPerson={openPerson} onAddPeople={openAdding} />
         ) : tab === "round" ? (
           <MyRound data={data} me={me} now={now} gps={gps} />
         ) : (
@@ -275,3 +314,13 @@ function SharingPill({ roundId, hole, reload }: { roundId: string; hole: number;
     </div>
   );
 }
+
+function BellIcon({ filled }: { filled?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden>
+      <path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z" />
+      <path d="M10 20.5a2 2 0 0 0 4 0" fill="none" />
+    </svg>
+  );
+}
+

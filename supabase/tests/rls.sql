@@ -254,4 +254,60 @@ select pg_temp.fails($$insert into storage.objects (bucket_id, name) values ('av
 reset role;
 select pg_temp.ok((select count(*) = 1 from storage.objects), 'own profile photo uploaded');
 
+-- Alerts: watches, the SQL pace model, and notifications from round changes + the minute job.
+reset role;
+delete from public.rounds;
+delete from public.friendships where least(user_id, friend_id) = '00000000-0000-0000-0000-00000000000a' and greatest(user_id, friend_id) = '00000000-0000-0000-0000-00000000000b';
+insert into public.friendships (user_id, friend_id, status) values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b', 'accepted');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+set role authenticated;
+insert into public.watches (golfer_id, holes, before_finish_min, tee_off, finished, ball_hunt)
+  values ('00000000-0000-0000-0000-00000000000a', '{9,18}', 30, true, true, true);
+select pg_temp.fails($$insert into public.watches (golfer_id, every_hole) values ('00000000-0000-0000-0000-00000000000c', true)$$, 'can only watch a friend');
+select pg_temp.fails($$update public.watches set holes = '{19}'$$, 'holes must be 1..18');
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+select pg_temp.ok((select count(*) = 1 from public.watches where golfer_id = auth.uid()), 'golfer sees who gets updates about them');
+insert into public.rounds (course_id, tee_time) values ('redhawk', now() - interval '150 minutes');
+update public.rounds set hole = 11, hole_started_at = now() - interval '5 minutes';
+-- Same case as app/src/lib/pace.test.ts "matches the reference": 108 min left, 2 min behind.
+select pg_temp.ok((select round(extract(epoch from e.eta - now()) / 60) = 108 and round(e.delta_min) = 2
+  from public.rounds r, public.round_eta(r) e), 'SQL pace model matches the app (108 min left, +2)');
+reset role;
+select pg_temp.ok((select count(*) = 1 and bool_and(kind = 'hole' and hole = 9 and eta is not null and user_id = '00000000-0000-0000-0000-00000000000b') from public.notifications),
+  'jumping 1 -> 11 sends exactly the picked hole (9), with an ETA');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+update public.rounds set hole = 12, hole_started_at = now();
+select pg_temp.ok((select count(*) = 0 from public.notifications), 'golfer never sees the alerts sent to others');
+update public.rounds set searching_since = now() - interval '3 minutes';
+reset role;
+select pg_temp.ok((select count(*) = 2 and count(*) filter (where kind = 'ball_hunt') = 1 from public.notifications), 'ball hunt alert (and nothing for unpicked hole 11)');
+select public.notify_tick();
+select public.notify_tick();
+select pg_temp.ok((select count(*) filter (where kind = 'tee_off') = 1 and count(*) filter (where kind = 'soon') = 0 from public.notifications),
+  'minute job: teed off once (run twice), not yet 30 min out');
+set session_replication_role = replica; -- jump them to the 18th, nearly done
+update public.rounds set hole = 18, hole_started_at = now() - interval '12 minutes', hole_fraction = 0.8;
+set session_replication_role = origin;
+select public.notify_tick();
+select pg_temp.ok((select count(*) filter (where kind = 'soon') = 1 from public.notifications), 'about 30 min from done');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+insert into public.round_scores (round_id, hole, strokes) select id, 1, 6 from public.rounds;
+update public.rounds set status = 'done';
+reset role;
+select pg_temp.ok((select strokes = 6 from public.notifications where kind = 'finished'), 'finished alert carries their score');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+set role authenticated;
+select pg_temp.ok((select count(*) = 5 from public.notifications), 'recipient sees their alerts');
+update public.notifications set read_at = now();
+select pg_temp.ok((select bool_and(read_at is not null) from public.notifications), 'recipient can mark alerts read');
+select pg_temp.fails($$update public.notifications set kind = 'soon'$$, 'alerts cannot be edited beyond read');
+select pg_temp.fails($$insert into public.notifications (user_id, golfer_id, round_id, kind) select '00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-00000000000a', id, 'soon' from public.rounds$$,
+  'clients cannot create alerts');
+select pg_temp.fails($$select public.notify_tick()$$, 'clients cannot run the alert job');
+reset role;
+
 \warn 'All RLS tests passed.'

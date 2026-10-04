@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { CourseData } from "../lib/courses";
 import { endRound, getScores, listCourses, setHole, setScore, startRound, type Round } from "../lib/db";
 import { fmtToPar, summarize } from "../lib/score";
+import { isOff, summarizeWatch } from "../lib/notify";
 import { DEFAULT_TARGET, type Mode } from "../lib/pace";
 import { ModeIcon } from "../components/ModeIcon";
 import { toYards } from "../lib/onCourse";
@@ -229,6 +230,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
       </div>
     </div>
     <ScoreCard round={round} now={now} pars={seq.map((h) => h.par)} data={data} />
+    <Watchers data={data} golfer={round.user_id} />
     <div className="list">
       <div className="actions">
         {round.hole < 18 && (
@@ -314,3 +316,20 @@ function Challengers({ round, scores, data }: { round: Round; scores: Map<number
     </p>
   );
 }
+
+/** Who gets alerts about your rounds (shown so sharing is never a surprise). */
+function Watchers({ data, golfer }: { data: LiveData; golfer: string }) {
+  const watchers = data.watches.filter((w) => w.golfer_id === golfer && !isOff(w));
+  if (!watchers.length) return null;
+  return (
+    <section className="card watchers">
+      <span className="label">🔔 Getting updates</span>
+      {watchers.map((w) => (
+        <p key={w.watcher_id} className="note">
+          <b>{data.profiles.get(w.watcher_id)?.display_name || "A friend"}</b>: {summarizeWatch(w)}
+        </p>
+      ))}
+    </section>
+  );
+}
+

@@ -14,7 +14,7 @@ import { Avatar } from "../components/Avatar";
 import { HoleStrip, PaceChip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
 
-export function People({ data, me, now, rounds, query, onOpen, onAddPeople }: {
+export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPeople }: {
   data: LiveData;
   me: string;
   now: number;
@@ -23,6 +23,8 @@ export function People({ data, me, now, rounds, query, onOpen, onAddPeople }: {
   /** Name / @username filter from the search box ("" = everyone). */
   query: string;
   onOpen: (roundId: string) => void;
+  /** A friend who isn't playing (their page has the alert bell). */
+  onPerson: (id: string) => void;
   onAddPeople: () => void;
 }) {
   const nameOf = (id: string) => data.profiles.get(id)?.display_name || "Golfer";
@@ -48,13 +50,13 @@ export function People({ data, me, now, rounds, query, onOpen, onAddPeople }: {
     const info = r ? roundInfo(r, data.courses.get(r.course_id), now) : null;
     if (!r || !info) {
       return (
-        <div key={id} className="row-btn static idle">
+        <button key={id} className="row-btn idle" onClick={() => onPerson(id)}>
           <Avatar id={id} name={nameOf(id)} photo={p?.avatar_url} />
           <span className="row-main">
             <b>{nameOf(id)}</b>
             <span className="sub">{p?.username ? `@${p.username}` : "Not on the course"}</span>
           </span>
-        </div>
+        </button>
       );
     }
     const { est, label, seq } = info;

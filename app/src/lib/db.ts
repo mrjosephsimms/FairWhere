@@ -256,6 +256,58 @@ export async function getMyHistory(me: string): Promise<{ rounds: Round[]; score
   return { rounds, scores, plays };
 }
 
+// ------------------------------------------------------------------ alerts
+
+/** What `watcher_id` wants to hear about `golfer_id`'s rounds (saved for all future rounds). */
+export interface Watch {
+  watcher_id: string;
+  golfer_id: string;
+  every_hole: boolean;
+  holes: number[];
+  before_finish_min: 15 | 30 | 45 | 60 | null;
+  tee_off: boolean;
+  finished: boolean;
+  ball_hunt: boolean;
+}
+
+export type WatchSettings = Omit<Watch, "watcher_id" | "golfer_id">;
+
+/** An alert sent to you (created on the server; see migration 12). */
+export interface Note {
+  id: string;
+  user_id: string;
+  golfer_id: string;
+  round_id: string;
+  kind: "hole" | "soon" | "tee_off" | "finished" | "ball_hunt";
+  hole: number | null;
+  eta: string | null;
+  delta_min: number | null;
+  strokes: number | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+/** Your watches, plus anyone watching you (so you can see who gets updates). */
+export async function listWatches(): Promise<Watch[]> {
+  return check(await supabase.from("watches").select("*"));
+}
+
+export async function saveWatch(golferId: string, w: WatchSettings) {
+  check(await supabase.from("watches").upsert({ golfer_id: golferId, ...w, updated_at: new Date().toISOString() }));
+}
+
+export async function removeWatch(me: string, golferId: string) {
+  check(await supabase.from("watches").delete().eq("watcher_id", me).eq("golfer_id", golferId));
+}
+
+export async function listNotes(): Promise<Note[]> {
+  return check(await supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(60));
+}
+
+export async function markNotesRead(ids: string[]) {
+  if (ids.length) check(await supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids));
+}
+
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */
 export async function endRound(id: string, how: "done" | "cancelled") {
   check(await supabase.from("rounds").update({ status: how }).eq("id", id));

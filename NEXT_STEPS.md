@@ -49,9 +49,7 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   Write `hole`/`hole_fraction`/`last_*` on hole change, else at most every 60–90 s. Add a debug overlay
   (distance, candidate hole, fix count) for the Redhawk field test.
 
-## Related: Yardsale Club (SaleMap) is being shelved
-- Archive guide: SaleMap repo `ARCHIVE.md`, in draft PR https://github.com/mrjosephsimms/SaleMap/pull/70
-  (not merged yet). After merging, create tag `archive/yardsale-club-2026-10-03` (commands in ARCHIVE.md).
-- Still to do on the Mac mini: encrypted backup of the secrets (Apple `.p8` keys are the only copies),
-  `pg_dump` of the SaleMap DB, then choose Mothball vs Cold storage.
-  If it stays live: the Apple sign-in client secret in SaleMap's Supabase expires ~Dec 8 2026.
+## Related: Yard Sale Club (SaleMap) stays live
+- Decided 2026-10-04: Yard Sale Club is **not** being shelved. Find My Golfer launches as its own App Store app
+  (own repo, Supabase project and bundle ID; shares only the Apple Developer team). Don't merge SaleMap's draft
+  ARCHIVE.md PR (#70).
