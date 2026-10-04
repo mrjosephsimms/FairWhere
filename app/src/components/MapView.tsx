@@ -31,6 +31,7 @@ export interface MapPin {
   lat: number;
   lng: number;
   name: string;
+  photo?: string | null;
   badge?: string;
   me?: boolean;
   selected?: boolean;
@@ -115,7 +116,14 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
       node.className = `pin${p.me ? " me" : ""}${p.selected ? " selected" : ""}`;
       node.setAttribute("aria-label", `${p.me ? "You" : p.name}${p.badge ? `, hole ${p.badge}` : ""}`);
       node.style.setProperty("--pin", colorFor(p.id));
-      node.innerHTML = `<span>${initials(p.name)}</span>${p.badge ? `<b>${p.badge}</b>` : ""}`;
+      node.replaceChildren();
+      if (p.photo) {
+        const img = document.createElement("img");
+        img.src = p.photo;
+        img.alt = "";
+        node.append(img);
+      } else node.append(Object.assign(document.createElement("span"), { textContent: initials(p.name) }));
+      if (p.badge) node.append(Object.assign(document.createElement("b"), { textContent: p.badge }));
     }
     for (const [id, mk] of markers.current) if (!seen.has(id)) (mk.remove(), markers.current.delete(id));
   }, [pins]);

@@ -1,0 +1,124 @@
+// "Add people" (the + on People): your @username / code to share, add someone by
+// @username or code, answer requests, manage who you're connected with.
+import { useEffect, useState, type FormEvent } from "react";
+import { removeFriendship, requestFriend, respondFriend, type Friendship } from "../lib/db";
+import { useAction, type LiveData } from "../lib/hooks";
+import { shareInvite } from "../lib/native";
+import { Avatar } from "../components/Avatar";
+
+export function AddPeople({ data, me, incomingCode, onCodeUsed }: {
+  data: LiveData;
+  me: string;
+  incomingCode: string | null;
+  onCodeUsed: () => void;
+}) {
+  const profile = data.profiles.get(me);
+  const nameOf = (id: string) => data.profiles.get(id)?.display_name || "Golfer";
+  const handleOf = (id: string) => data.profiles.get(id)?.username;
+  const other = (f: Friendship) => (f.user_id === me ? f.friend_id : f.user_id);
+  const accepted = data.friendships.filter((f) => f.status === "accepted").sort((a, b) => nameOf(other(a)).localeCompare(nameOf(other(b))));
+  const incoming = data.friendships.filter((f) => f.status === "pending" && f.friend_id === me);
+  const outgoing = data.friendships.filter((f) => f.status === "pending" && f.user_id === me);
+
+  const { busy, err, run } = useAction(data.reload);
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (incomingCode) {
+      setCode(incomingCode);
+      onCodeUsed();
+    }
+  }, [incomingCode, onCodeUsed]);
+
+  function add(e: FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    run(async () => {
+      const status = await requestFriend(code);
+      setCode("");
+      setMsg(status === "accepted" ? "You're now connected." : "Request sent. They'll show up once they accept.");
+    });
+  }
+
+  const person = (id: string, extra?: React.ReactNode) => (
+    <div className="person">
+      <Avatar id={id} name={nameOf(id)} photo={data.profiles.get(id)?.avatar_url} size={40} />
+      <span className="row-main">
+        <b>{nameOf(id)}</b>
+        {handleOf(id) && <span className="sub">@{handleOf(id)}</span>}
+      </span>
+      {extra}
+    </div>
+  );
+
+  return (
+    <div className="list">
+      <form className="card" onSubmit={add}>
+        <label className="f">
+          Add by @username or code
+          <div className="inline">
+            <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={21}
+              autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="@username or ABC234" />
+            <button className="btn" disabled={busy || code.trim().replace(/^@/, "").length < 3}>Add</button>
+          </div>
+        </label>
+        {msg && <p className="note">{msg}</p>}
+        {err && <p className="note err" role="alert">{err}</p>}
+      </form>
+
+      <section className="card share">
+        <span className="label">Share yours</span>
+        <div className="share-ids">
+          {profile?.username && <b>@{profile.username}</b>}
+          <span className="code">{profile?.friend_code ?? "······"}</span>
+        </div>
+        <button className="btn" disabled={!profile}
+          onClick={async () => setMsg((await shareInvite(profile!.friend_code, profile!.display_name)) === "copied" ? "Invite copied." : null)}>
+          Invite someone
+        </button>
+      </section>
+
+      {incoming.length > 0 && (
+        <section className="card">
+          <span className="label">Requests</span>
+          {incoming.map((f) => (
+            <div key={f.user_id}>
+              {person(f.user_id,
+                <div className="actions tight">
+                  <button className="btn" disabled={busy} onClick={() => run(() => respondFriend(f.user_id, true))}>Accept</button>
+                  <button className="btn ghost" disabled={busy} onClick={() => run(() => respondFriend(f.user_id, false))}>Decline</button>
+                </div>)}
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className="card">
+        <span className="label">Your people</span>
+        {accepted.length === 0 && outgoing.length === 0 && <p className="note">No one yet. Add someone above, or share yours.</p>}
+        {accepted.map((f) => (
+          <div key={other(f)}>
+            {person(other(f), <button className="btn ghost small" onClick={() => setConfirmRemove(other(f))}>Remove</button>)}
+            {confirmRemove === other(f) && (
+              <div className="confirm">
+                <b>Remove {nameOf(other(f))}?</b>
+                <span className="note">You'll stop seeing each other's rounds.</span>
+                <div className="actions">
+                  <button className="btn flag" disabled={busy} onClick={() => run(() => removeFriendship(f)).then(() => setConfirmRemove(null))}>Remove</button>
+                  <button className="btn ghost" onClick={() => setConfirmRemove(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {outgoing.map((f) => (
+          <div key={f.friend_id}>
+            {person(f.friend_id, <button className="btn ghost small" disabled={busy} onClick={() => run(() => removeFriendship(f))}>Cancel request</button>)}
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}

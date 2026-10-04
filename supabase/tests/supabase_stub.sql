@@ -27,3 +27,20 @@ create publication supabase_realtime;
 -- pg_cron isn't installed locally: test-db.sh strips the CREATE EXTENSION line.
 create schema cron;
 create function cron.schedule(text, text, text) returns bigint language sql as $$ select 1::bigint $$;
+
+-- Supabase Storage, just enough for the bucket + policies in the migrations.
+create schema storage;
+create table storage.buckets (id text primary key, name text not null, public boolean default false);
+create table storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text references storage.buckets (id),
+  name text not null,
+  owner uuid default auth.uid()
+);
+create function storage.foldername(name text) returns text[] language sql immutable as $$
+  select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1]
+$$;
+alter table storage.objects enable row level security;
+grant usage on schema storage to anon, authenticated;
+grant all on storage.objects to authenticated;
+

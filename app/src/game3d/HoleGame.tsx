@@ -133,7 +133,7 @@ function Game({ roundId, hole, me, owner, plays, profiles, features, save = true
     setTimeout(() => setPhase("done"), 1600);
     if (!save) return;
     setSaved("saving");
-    recordPlay(roundId, hole.n, s.strokes).then(() => (setSaved("yes"), onSaved?.())).catch(() => setSaved("error"));
+    recordPlay(roundId, hole.n, s.strokes, owner.score).then(() => (setSaved("yes"), onSaved?.())).catch(() => setSaved("error"));
   }
 
   function again() {

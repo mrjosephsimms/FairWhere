@@ -171,6 +171,7 @@ reset role;
 update public.rounds set finished_at = now() - interval '5 hours' where user_id::text like '%a';
 set role authenticated;
 select pg_temp.ok((select count(*) = 0 from public.rounds), 'finished round hidden after 4h');
+select pg_temp.ok((select count(*) = 1 from public.game_plays), 'B still sees their own hole-game play after the round is hidden');
 reset role;
 
 -- Selected visibility: D shares with A only; B (also D's friend) must not see it.
@@ -232,5 +233,25 @@ select pg_temp.fails($$insert into public.courses (id, name, data) values ('x', 
 select pg_temp.fails($$select * from public.share_links$$ || ' where false; insert into public.share_links (round_id, expires_at) select id, now() from public.rounds',
   'clients cannot create share links');
 reset role;
+
+-- Usernames, @-adds, and profile photos.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+set role authenticated;
+update public.profiles set username = 'cara.golf' where id = auth.uid();
+select pg_temp.ok((select username = 'cara.golf' from public.profiles where id = auth.uid()), 'set my @username');
+select pg_temp.fails($$update public.profiles set username = 'No Spaces!' where id = auth.uid()$$, 'username format enforced');
+update public.profiles set username = 'hijack' where id = '00000000-0000-0000-0000-00000000000a';
+reset role;
+select pg_temp.ok((select username is null from public.profiles where id = '00000000-0000-0000-0000-00000000000a'), 'cannot set someone else''s username');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+set role authenticated;
+select pg_temp.fails($$update public.profiles set username = 'cara.golf' where id = auth.uid()$$, 'usernames are unique');
+select pg_temp.ok((select public.request_friend('@Cara.Golf') = 'pending'), 'add a friend by @username (any case)');
+select pg_temp.fails($$select public.request_friend('@nobody.here')$$, 'unknown @username rejected');
+insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-00000000000d/me.jpg');
+select pg_temp.fails($$insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-00000000000a/me.jpg')$$,
+  'cannot upload into someone else''s photo folder');
+reset role;
+select pg_temp.ok((select count(*) = 1 from storage.objects), 'own profile photo uploaded');
 
 \warn 'All RLS tests passed.'
