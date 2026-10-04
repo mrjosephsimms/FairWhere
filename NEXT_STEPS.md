@@ -11,18 +11,22 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
 - **Never run against the real Supabase project or on a device yet.** The cloud sandbox's
   network policy blocked `*.supabase.co`.
 
-## Supabase project (created by Sunny, still empty)
+## Supabase project — set up 2026-10-03 (local Mac session)
 - Project: **FindMyGolfer**, ref `uvyeenrkkvvsizszdizv`, URL `https://uvyeenrkkvvsizszdizv.supabase.co`,
-  us-east-1, free plan. Separate from SaleMap's project, as intended.
-- [ ] Apply migrations in order: `supabase/migrations/20261003000001_init.sql`, `…02_expire_stale_rounds.sql`,
-      `…03_seed_courses.sql` (SQL editor, or `supabase db push --db-url "<direct connection string>"`).
-      Then confirm in Table Editor: `courses` has 2 rows, and Database → Cron has `expire-stale-rounds`.
-- [ ] Auth → URL Configuration → Redirect URLs: `findmygolfer://auth-callback` and `http://localhost:5173`.
-- [ ] Auth → Emails → Magic Link template: add `{{ .Token }}` (the app accepts the link or the 6-digit code).
-- [ ] Create `app/.env` from `app/.env.example` with the project URL and the `sb_publishable_…` key.
+  us-east-1, free plan. Separate from SaleMap's project, as intended. Repo is `supabase link`ed.
+- [x] Migrations 01–03 applied with `supabase db push --linked`. Verified: 6 public tables all RLS-on,
+      `courses` = 2 rows, cron `expire-stale-rounds` (*/15) active, `rounds` + `friendships` in `supabase_realtime`.
+      (01 needed `pgcrypto` → `extensions` schema: hosted Supabase installs extensions there.)
+- [x] Auth config pushed from `supabase/config.toml` (`supabase config push`): site URL `http://localhost:5180`,
+      redirect URLs `findmygolfer://auth-callback` + `http://localhost:5180` (+ `/**`), email OTP length 8 → 6.
+- [x] `app/.env` written (URL + `sb_publishable_…` key; gitignored, local to this Mac).
+- [x] Custom SMTP (Gmail app password, mrjosephsimms@gmail.com) set in the dashboard by Sunny; email rate limit 30/h.
+- [x] Magic-link email with the 6-digit code pushed (`supabase/templates/magic_link.html`). Use the code when the
+      email is opened on a different device than the one that asked for it (links only work in the same browser).
+- [x] Phone testing: redirect allow-list includes the Mac's Tailscale URL `http://100.111.147.89:5180/**`.
 
 ## First real test (do this before any new features)
-1. `cd app && npm install && npm run dev` → sign in by email on http://localhost:5173.
+1. `cd app && npm install && npm run dev` → sign in by email on http://localhost:5180.
 2. Sign in as a second user in a private window. Add each other by friend code.
 3. User A starts a round and steps holes. User B's "Who's out" should update **without a refresh**
    (Realtime). If it doesn't, check that `rounds` and `friendships` are in Database → Publications →

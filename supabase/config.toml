@@ -2,5 +2,26 @@
 project_id = "find-my-golfer"
 
 [auth]
-site_url = "http://localhost:5173"
-additional_redirect_urls = ["findmygolfer://auth-callback", "http://localhost:5173"]
+site_url = "http://localhost:5180"
+additional_redirect_urls = ["findmygolfer://auth-callback", "http://localhost:5180", "http://localhost:5180/**", "http://100.111.147.89:5180/**"]
+
+# Magic link email: the app accepts either the link or the 6-digit code (SignIn.tsx).
+# Needs custom SMTP (set in the dashboard: Auth -> Emails -> SMTP, Gmail app password).
+[auth.email.template.magic_link]
+subject = "Your Find My Golfer sign-in code"
+content_path = "./supabase/templates/magic_link.html"
+
+# Pinned to the hosted project's values so `supabase config push` only changes what we mean to.
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 6
+
+# Emails per hour across the project (only adjustable with custom SMTP).
+[auth.rate_limit]
+email_sent = 30
