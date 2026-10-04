@@ -1,12 +1,16 @@
 // Typed data access. Every read is filtered by RLS on the server
 // (supabase/migrations/20261003000001_init.sql); nothing here is a security boundary.
 import { supabase } from "./supabase";
-import type { CourseData } from "./courses";
+import type { CourseData, CourseFeatures } from "./courses";
+import type { Mode } from "./pace";
 
 export interface Profile {
   id: string;
   display_name: string;
   friend_code: string;
+  /** Unique @handle (without the @); null until they pick one. */
+  username: string | null;
+  avatar_url: string | null;
 }
 
 export interface Friendship {
@@ -31,6 +35,9 @@ export interface Round {
   last_fix_at: string | null;
   status: "live" | "done" | "cancelled";
   visibility: "friends" | "selected";
+  mode: Mode;
+  /** Set while the golfer seems to be hunting for a ball (lib/onCourse.ts). */
+  searching_since: string | null;
   finished_at: string | null;
   updated_at: string;
 }
@@ -45,11 +52,32 @@ function check<T>(res: { data: T | null; error: { message: string } | null }): T
 
 export async function getProfiles(ids: string[]): Promise<Profile[]> {
   if (!ids.length) return [];
-  return check(await supabase.from("profiles").select("id, display_name, friend_code").in("id", ids));
+  return check(await supabase.from("profiles").select("id, display_name, friend_code, username, avatar_url").in("id", ids));
 }
 
 export async function setDisplayName(id: string, name: string) {
   check(await supabase.from("profiles").update({ display_name: name.trim().slice(0, 40) }).eq("id", id));
+}
+
+export const USERNAME_RE = /^[a-z0-9_.]{3,20}$/;
+
+/** Claim a unique @username (lowercase letters, numbers, _ and .). */
+export async function setUsername(id: string, username: string) {
+  const u = username.trim().replace(/^@/, "").toLowerCase();
+  if (!USERNAME_RE.test(u)) throw new Error("3–20 characters: letters, numbers, _ or .");
+  const res = await supabase.from("profiles").update({ username: u }).eq("id", id);
+  if (res.error?.code === "23505") throw new Error(`@${u} is taken. Try another.`);
+  check(res);
+}
+
+/** Upload a profile photo (already resized to a small JPEG) and point the profile at it. */
+export async function setAvatar(id: string, photo: Blob) {
+  const path = `${id}/${Date.now()}.jpg`; // new name each time so caches refresh
+  const up = await supabase.storage.from("avatars").upload(path, photo, { contentType: "image/jpeg", upsert: false });
+  if (up.error) throw new Error(up.error.message);
+  const url = supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+  check(await supabase.from("profiles").update({ avatar_url: url }).eq("id", id));
+  return url;
 }
 
 // ------------------------------------------------------------------ friends
@@ -58,6 +86,7 @@ export async function listFriendships(): Promise<Friendship[]> {
   return check(await supabase.from("friendships").select("*").order("created_at", { ascending: false }));
 }
 
+/** By friend code or @username. */
 export async function requestFriend(code: string): Promise<"pending" | "accepted"> {
   return check(await supabase.rpc("request_friend", { code }));
 }
@@ -90,6 +119,12 @@ export async function getCourses(ids: string[]): Promise<Map<string, CourseData>
   return courseCache;
 }
 
+/** Mapped fairways / bunkers / water / woods / trees, for the hole game (big; load on demand). */
+export async function getCourseFeatures(id: string): Promise<CourseFeatures | null> {
+  const row: { features: CourseFeatures | null } = check(await supabase.from("courses").select("features").eq("id", id).single());
+  return row.features;
+}
+
 // ------------------------------------------------------------------- rounds
 
 /** Rounds worth showing: live ones, and ones finished in the last 4h (RLS applies the same window to friends). */
@@ -109,6 +144,7 @@ export interface StartRound {
   nines: string[] | null;
   tee_time: Date;
   target_minutes: number;
+  mode: Mode;
   visibility: "friends" | "selected";
   viewers: string[];
 }
@@ -123,6 +159,7 @@ export async function startRound(s: StartRound): Promise<Round> {
         nines: s.nines,
         tee_time: s.tee_time.toISOString(),
         target_minutes: s.target_minutes,
+        mode: s.mode,
         hole: 1,
         hole_started_at: new Date(Math.max(teeMs, Date.now())).toISOString(),
         visibility: s.visibility,
@@ -148,6 +185,75 @@ export async function setHole(id: string, hole: number) {
       .update({ hole, hole_started_at: new Date().toISOString(), hole_fraction: null })
       .eq("id", id),
   );
+}
+
+/** Live GPS: position, progress along the hole, ball hunt, and (on auto-advance) the hole. */
+export async function updateRoundPosition(
+  id: string,
+  patch: Partial<Pick<Round, "last_lat" | "last_lng" | "last_fix_at" | "hole_fraction" | "searching_since" | "hole" | "hole_started_at">>,
+) {
+  check(await supabase.from("rounds").update(patch).eq("id", id).eq("status", "live"));
+}
+
+// ------------------------------------------------------------------- scores
+
+/** Your scorecard for a round: hole -> strokes (private to you, RLS). */
+export async function getScores(roundId: string): Promise<Map<number, number>> {
+  const rows: { hole: number; strokes: number }[] = check(await supabase.from("round_scores").select("hole, strokes").eq("round_id", roundId));
+  return new Map(rows.map((r) => [r.hole, r.strokes]));
+}
+
+/** Scorecards for several rounds (yours, and friends' you can see): round id -> hole -> strokes. */
+export async function getScoresFor(roundIds: string[]): Promise<Map<string, Map<number, number>>> {
+  const out = new Map<string, Map<number, number>>();
+  if (!roundIds.length) return out;
+  const rows: { round_id: string; hole: number; strokes: number }[] = check(
+    await supabase.from("round_scores").select("round_id, hole, strokes").in("round_id", roundIds),
+  );
+  for (const r of rows) {
+    if (!out.has(r.round_id)) out.set(r.round_id, new Map());
+    out.get(r.round_id)!.set(r.hole, r.strokes);
+  }
+  return out;
+}
+
+export async function setScore(roundId: string, hole: number, strokes: number) {
+  check(await supabase.from("round_scores").upsert({ round_id: roundId, hole, strokes, updated_at: new Date().toISOString() }));
+}
+
+// --------------------------------------------------------------- hole game
+
+export interface GamePlay {
+  id: string;
+  round_id: string;
+  hole: number;
+  player_id: string;
+  strokes: number;
+  /** The real score they were trying to beat, if there was one. */
+  to_beat: number | null;
+  created_at: string;
+}
+
+/** Everyone's "play this hole" results on the rounds you can see. */
+export async function getPlaysFor(roundIds: string[]): Promise<GamePlay[]> {
+  if (!roundIds.length) return [];
+  return check(await supabase.from("game_plays").select("*").in("round_id", roundIds).order("created_at"));
+}
+
+export async function recordPlay(roundId: string, hole: number, strokes: number, toBeat?: number) {
+  check(await supabase.from("game_plays").insert({ round_id: roundId, hole, strokes, to_beat: toBeat ?? null }));
+}
+
+/** Everything for your profile: all your finished/stopped rounds, their scorecards, your hole-game plays. */
+export async function getMyHistory(me: string): Promise<{ rounds: Round[]; scores: Map<string, Map<number, number>>; plays: GamePlay[] }> {
+  const rounds: Round[] = check(
+    await supabase.from("rounds").select("*").eq("user_id", me).neq("status", "live").order("tee_time", { ascending: false }).limit(200),
+  );
+  const [scores, plays] = await Promise.all([
+    getScoresFor(rounds.map((r) => r.id)),
+    supabase.from("game_plays").select("*").eq("player_id", me).then((res) => check(res) as GamePlay[]),
+  ]);
+  return { rounds, scores, plays };
 }
 
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */

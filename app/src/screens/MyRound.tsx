@@ -1,22 +1,32 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { CourseData } from "../lib/courses";
-import { endRound, listCourses, setHole, startRound, type Round } from "../lib/db";
+import { endRound, getScores, listCourses, setHole, setScore, startRound, type Round } from "../lib/db";
+import { fmtToPar, summarize } from "../lib/score";
+import { DEFAULT_TARGET, type Mode } from "../lib/pace";
+import { ModeIcon } from "../components/ModeIcon";
+import { toYards } from "../lib/onCourse";
+import type { GpsState } from "../lib/tracker";
+import { fmtDur } from "../lib/time";
 import { useAction, type LiveData } from "../lib/hooks";
 import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
-import { CourseMap, HoleStrip, PaceChip, StopConfirm } from "../components/RoundView";
+import { HoleStrip, PaceChip, StopConfirm } from "../components/RoundView";
 
 const PACES = [
+  [210, "3h 30m"],
   [225, "3h 45m"],
   [240, "4h 00m"],
   [255, "4h 15m"],
   [270, "4h 30m"],
   [285, "4h 45m"],
+  [300, "5h 00m"],
 ] as const;
 
-export function MyRound({ data, me, now }: { data: LiveData; me: string; now: number }) {
+const MODES: [Mode, string][] = [["riding", "Riding"], ["walking", "Walking"]];
+
+export function MyRound({ data, me, now, gps }: { data: LiveData; me: string; now: number; gps: GpsState }) {
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
-  if (live) return <LiveRound round={live} data={data} now={now} />;
+  if (live) return <LiveRound round={live} data={data} now={now} gps={gps} />;
   const last = data.rounds.find((r) => r.user_id === me && r.status === "done");
   return (
     <>
@@ -34,7 +44,9 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
   const [tee, setTee] = useState(() => toTimeInput(nextTeeSlot(new Date())));
-  const [target, setTarget] = useState(255);
+  const [mode, setModeState] = useState<Mode>("riding");
+  const [target, setTarget] = useState(DEFAULT_TARGET.riding);
+  const [paceTouched, setPaceTouched] = useState(false);
   const [visibility, setVisibility] = useState<"friends" | "selected">("friends");
   const [viewers, setViewers] = useState<Set<string>>(new Set());
   const { busy, err, run } = useAction(data.reload);
@@ -79,6 +91,7 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
         nines: course.nines ? [front, back] : null,
         tee_time: teeTimeFromInput(tee, new Date()),
         target_minutes: target,
+        mode,
         visibility,
         viewers: [...viewers],
       }),
@@ -90,6 +103,16 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 
   return (
     <form className="card" onSubmit={submit}>
+      <div className="segmented" role="radiogroup" aria-label="Walking or riding">
+        {MODES.map(([m, label]) => (
+          <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => {
+            setModeState(m);
+            if (!paceTouched) setTarget(DEFAULT_TARGET[m]); // follow the mode until they pick a pace
+          }}>
+            <ModeIcon mode={m} /> {label}
+          </button>
+        ))}
+      </div>
       <label className="f">
         Course
         <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
@@ -121,8 +144,8 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
           <input type="time" value={tee} onChange={(e) => setTee(e.target.value)} required />
         </label>
         <label className="f">
-          Usual pace
-          <select value={target} onChange={(e) => setTarget(Number(e.target.value))}>
+          Usual pace ({mode})
+          <select value={target} onChange={(e) => (setTarget(Number(e.target.value)), setPaceTouched(true))}>
             {PACES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
@@ -159,7 +182,7 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   );
 }
 
-function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: number }) {
+function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; now: number; gps: GpsState }) {
   const [confirmStop, setConfirmStop] = useState(false);
   const { busy, err, run } = useAction(data.reload);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
@@ -168,29 +191,45 @@ function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: nu
   const go = (n: number) => n >= 1 && n <= 18 && n !== round.hole && run(() => setHole(round.id, n));
 
   return (
+    <>
     <div className="card">
       <div className="row">
-        <div className="course">{label}</div>
+        <div className="course mode-line"><ModeIcon mode={round.mode} size={16} /> {label}</div>
         <PaceChip est={est} />
       </div>
-      <div className="big">
-        <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "On hole"}</span>
-        <div className="hole">{round.hole}</div>
-        <div className="note">
-          Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""} · finish around <b>{fmtTime(est.eta)}</b>
+
+      <div className="stats">
+        <div className="stat">
+          <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "On hole"}</span>
+          <b>{round.hole}<small>/18</small></b>
+          <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>
+        </div>
+        <div className="stat">
+          <span className="label">To the green</span>
+          {gps.pos ? <b>{toYards(gps.pos.toGreenM)}<small>yds</small></b> : <b className="dim">—</b>}
+          <span className="sub">{gpsLine(gps)}</span>
         </div>
       </div>
+      {gps.pos && (
+        <div className="progress" aria-label={`${Math.round(gps.pos.frac * 100)}% of the hole`}>
+          <i style={{ width: `${Math.round(gps.pos.frac * 100)}%` }} />
+          <span>{Math.round(gps.pos.frac * 100)}% of the hole · {toYards(gps.pos.fromTeeM)} yds from the tee</span>
+        </div>
+      )}
+      {gps.searchingSince && <p className="hunt">🔎 Ball hunt? {fmtDur(now - gps.searchingSince)} in this spot. Your friends can see it.</p>}
+      <p className="note">Finish around <b>{fmtTime(est.eta)}</b></p>
       <div className="stepper">
         <button className="btn ghost" aria-label="Back one hole" disabled={busy || round.hole <= 1} onClick={() => go(round.hole - 1)}>−</button>
         {round.hole < 18 ? (
-          <button className="btn" disabled={busy} onClick={() => go(round.hole + 1)}>Walking to {round.hole + 1}</button>
+          <button className="btn" disabled={busy} onClick={() => go(round.hole + 1)}>On to hole {round.hole + 1}</button>
         ) : (
           <button className="btn flag" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish round</button>
         )}
         <button className="btn ghost" aria-label="Forward one hole" disabled={busy || round.hole >= 18} onClick={() => go(round.hole + 1)}>+</button>
       </div>
-      <HoleStrip round={round} now={now} />
-      <CourseMap seq={seq} round={round} est={est} />
+    </div>
+    <ScoreCard round={round} now={now} pars={seq.map((h) => h.par)} data={data} />
+    <div className="list">
       <div className="actions">
         {round.hole < 18 && (
           <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish early</button>
@@ -202,5 +241,76 @@ function LiveRound({ round, data, now }: { round: Round; data: LiveData; now: nu
       )}
       {err && <p className="note err" role="alert">{err}</p>}
     </div>
+    </>
+  );
+}
+
+/** Your scorecard: a big -/+ pad for the selected hole, the running total, and the nine pills as the card. */
+function ScoreCard({ round, now, pars, data }: { round: Round; now: number; pars: number[]; data: LiveData }) {
+  const [scores, setScores] = useState<Map<number, number>>(new Map());
+  const [sel, setSel] = useState(round.hole);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => setSel(round.hole), [round.hole]); // follow the golfer to each new hole
+  useEffect(() => {
+    getScores(round.id).then(setScores).catch((e) => setErr(e.message));
+  }, [round.id]);
+
+  const par = pars[sel - 1];
+  const val = scores.get(sel);
+  const sum = summarize(scores, pars);
+  function save(n: number) {
+    const strokes = Math.min(Math.max(n, 1), 20), prev = scores;
+    setScores(new Map(scores).set(sel, strokes)); // optimistic
+    setErr(null);
+    setScore(round.id, sel, strokes).catch((e) => (setScores(prev), setErr(`Couldn't save that score: ${e.message}`)));
+  }
+
+  return (
+    <section className="card scorecard" aria-label="Scorecard">
+      <div className="row-between">
+        <span className="label">Score</span>
+        <span className="score-total">
+          {sum.thru ? <><b>{fmtToPar(sum.toPar)}</b> · {sum.strokes} thru {sum.thru}</> : "Tap the number for par"}
+        </span>
+      </div>
+      <div className="score-pad">
+        <button className="pad-btn" aria-label="One fewer stroke" onClick={() => save((val ?? par) - 1)}>−</button>
+        <button className={`pad-val${val == null ? " unset" : ""}`} onClick={() => val == null && save(par)}
+          aria-label={val == null ? `Hole ${sel}: tap to enter par` : `Hole ${sel}: ${val} strokes`}>
+          <b>{val ?? par}</b>
+          <span>Hole {sel} · Par {par}</span>
+        </button>
+        <button className="pad-btn" aria-label="One more stroke" onClick={() => save((val ?? par) + 1)}>+</button>
+      </div>
+      <HoleStrip round={round} now={now} scores={scores} pars={pars} selected={sel} onSelect={setSel} />
+      <Challengers round={round} scores={scores} data={data} />
+      {err && <p className="note err" role="alert">{err}</p>}
+    </section>
+  );
+}
+
+function gpsLine(gps: GpsState): string {
+  if (gps.status === "asking") return "Finding you…";
+  if (gps.status === "denied") return "Location is off; use the buttons";
+  if (gps.status === "unavailable") return "No GPS on this device";
+  if (gps.status === "on" && !gps.pos) return "Off the course";
+  return gps.fix ? `GPS ±${Math.round(gps.fix.acc)} m` : "";
+}
+
+/**
+ * One quiet line about friends playing your holes at home (no alerts, by design):
+ * "🎮 Mary played 3 of your holes · beat you on 1".
+ */
+function Challengers({ round, scores, data }: { round: Round; scores: Map<number, number>; data: LiveData }) {
+  const plays = data.plays.filter((p) => p.round_id === round.id && p.player_id !== round.user_id);
+  if (!plays.length) return null;
+  const players = [...new Set(plays.map((p) => p.player_id))];
+  const holes = new Set(plays.map((p) => p.hole)).size;
+  const beat = new Set(plays.filter((p) => scores.has(p.hole) && p.strokes < scores.get(p.hole)!).map((p) => p.hole)).size;
+  const who = players.length === 1 ? data.profiles.get(players[0])?.display_name || "A friend" : `${players.length} friends`;
+  return (
+    <p className="challengers">
+      🎮 {who} played {holes === 1 ? "1 of your holes" : `${holes} of your holes`}{beat ? ` · beat you on ${beat}` : ""}
+    </p>
   );
 }

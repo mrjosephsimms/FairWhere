@@ -3,7 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { onResume } from "./native";
 import type { CourseData } from "./courses";
-import { getCourses, getProfiles, listFriendships, listVisibleRounds, type Friendship, type Profile, type Round } from "./db";
+import { getCourses, getPlaysFor, getProfiles, getScoresFor, listFriendships, listVisibleRounds, type Friendship, type GamePlay, type Profile, type Round } from "./db";
 
 export function useSession() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -30,13 +30,17 @@ export interface LiveData {
   friendships: Friendship[];
   profiles: Map<string, Profile>;
   courses: Map<string, CourseData>;
+  /** Scorecards for the visible rounds: round id -> hole -> strokes. */
+  scores: Map<string, Map<number, number>>;
+  /** "Play this hole" results on the visible rounds, oldest first. */
+  plays: GamePlay[];
   loaded: boolean;
   error: string | null;
   reload: () => void;
 }
 
 /**
- * Rounds, friendships and the profiles/courses they reference, kept fresh by
+ * Rounds, friendships, scorecards and the profiles/courses they reference, kept fresh by
  * Supabase Realtime (RLS decides which changes we receive), app resume, and a
  * slow fallback poll.
  */
@@ -46,6 +50,8 @@ export function useLiveData(me: string): LiveData {
     friendships: [],
     profiles: new Map(),
     courses: new Map(),
+    scores: new Map(),
+    plays: [],
     loaded: false,
     error: null,
   });
@@ -54,14 +60,22 @@ export function useLiveData(me: string): LiveData {
   const load = useCallback(async () => {
     try {
       const [rounds, friendships] = await Promise.all([listVisibleRounds(), listFriendships()]);
-      const ids = new Set([me, ...rounds.map((r) => r.user_id)]);
+      const roundIds = rounds.map((r) => r.id);
+      const [courses, scores, plays] = await Promise.all([
+        getCourses(rounds.map((r) => r.course_id)),
+        getScoresFor(roundIds),
+        getPlaysFor(roundIds),
+      ]);
+      const ids = new Set([me, ...rounds.map((r) => r.user_id), ...plays.map((p) => p.player_id)]);
       friendships.forEach((f) => (ids.add(f.user_id), ids.add(f.friend_id)));
-      const [profiles, courses] = await Promise.all([getProfiles([...ids]), getCourses(rounds.map((r) => r.course_id))]);
+      const profiles = await getProfiles([...ids]);
       setState({
         rounds,
         friendships,
         profiles: new Map(profiles.map((p) => [p.id, p])),
         courses: new Map(courses),
+        scores,
+        plays,
         loaded: true,
         error: null,
       });
@@ -81,6 +95,8 @@ export function useLiveData(me: string): LiveData {
       .channel(`live-${me}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "rounds" }, reload)
       .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "round_scores" }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_plays" }, reload)
       .subscribe();
     const offResume = onResume(reload);
     const poll = setInterval(load, 90000);

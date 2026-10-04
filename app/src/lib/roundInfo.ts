@@ -28,8 +28,24 @@ export function roundInfo(round: Round, course: CourseData | undefined, now: num
       holeFraction: round.hole_fraction,
       status: round.status,
       finishedAt: round.finished_at ? Date.parse(round.finished_at) : null,
+      mode: round.mode,
+      yards: seq.map((h) => h.yards),
     },
     now,
   );
   return { seq, hole: seq[round.hole - 1], est, label: courseLabel(course, round.nines) };
+}
+
+/**
+ * Rounds to show, live first then finished, by tee time. Mirrors the server's
+ * visibility window so a round drops off on time even without a refetch.
+ */
+export function visibleRounds(rounds: Round[], now: number): Round[] {
+  return rounds
+    .filter((r) =>
+      r.status === "live"
+        ? now - Date.parse(r.updated_at) < 6 * 3600e3
+        : r.status === "done" && r.finished_at != null && now - Date.parse(r.finished_at) < 4 * 3600e3,
+    )
+    .sort((a, b) => Number(a.status !== "live") - Number(b.status !== "live") || Date.parse(a.tee_time) - Date.parse(b.tee_time));
 }

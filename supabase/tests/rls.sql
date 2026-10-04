@@ -95,6 +95,19 @@ select pg_temp.fails($$insert into public.rounds (course_id, tee_time) values ('
 select pg_temp.fails($$insert into public.rounds (user_id, course_id, tee_time) values ('00000000-0000-0000-0000-00000000000c', 'redhawk', now())$$,
   'cannot start a round as someone else');
 update public.rounds set hole = 7, hole_started_at = now();
+select pg_temp.ok((select mode = 'riding' from public.rounds), 'mode defaults to riding');
+update public.rounds set mode = 'walking';
+select pg_temp.ok((select mode = 'walking' from public.rounds), 'owner can switch to walking mid-round');
+select pg_temp.fails($$update public.rounds set mode = 'jogging'$$, 'mode must be walking or riding');
+update public.rounds set searching_since = now() - interval '4 minutes';
+select set_config('test.a_round', (select id::text from public.rounds), false);
+insert into public.round_scores (round_id, hole, strokes) select id, 1, 5 from public.rounds;
+insert into public.round_scores (round_id, hole, strokes) select id, 2, 4 from public.rounds
+  on conflict (round_id, hole) do update set strokes = excluded.strokes;
+update public.round_scores set strokes = 3 where hole = 2;
+select pg_temp.ok((select sum(strokes) = 8 from public.round_scores), 'owner keeps score (insert, upsert, edit)');
+select pg_temp.fails($$insert into public.round_scores (round_id, hole, strokes) select id, 3, 0 from public.rounds$$, 'strokes must be 1..20');
+select pg_temp.fails($$insert into public.round_scores (round_id, hole, strokes) select id, 19, 4 from public.rounds$$, 'hole must be 1..18');
 reset role;
 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
@@ -103,13 +116,36 @@ select pg_temp.ok((select count(*) = 1 from public.rounds where hole = 7), 'frie
 select pg_temp.ok((select last_lat is not null from public.rounds), 'friend sees live position');
 update public.rounds set hole = 18;
 select pg_temp.ok((select hole = 7 from public.rounds), 'friend cannot move A''s round');
+select pg_temp.ok((select mode = 'walking' from public.rounds), 'friend sees A is walking');
+update public.rounds set mode = 'riding';
+select pg_temp.ok((select mode = 'walking' from public.rounds), 'friend cannot change A''s mode');
+select pg_temp.ok((select searching_since is not null from public.rounds), 'friend sees A is hunting for a ball');
+update public.rounds set searching_since = null;
+select pg_temp.ok((select searching_since is not null from public.rounds), 'friend cannot clear A''s ball hunt');
+select pg_temp.ok((select sum(strokes) = 8 from public.round_scores), 'friend sees A''s scorecard');
+insert into public.game_plays (round_id, hole, strokes) select id, 2, 3 from public.rounds;
+select pg_temp.ok((select count(*) = 1 and bool_and(player_id = '00000000-0000-0000-0000-00000000000b') from public.game_plays),
+  'friend B plays A''s hole 2 and the play is B''s');
+select pg_temp.fails($$insert into public.game_plays (round_id, hole, player_id, strokes)
+  select id, 2, '00000000-0000-0000-0000-00000000000d', 3 from public.rounds$$, 'cannot record a play as someone else');
+select pg_temp.fails($$update public.game_plays set strokes = 1$$, 'plays cannot be edited');
+select pg_temp.fails($$insert into public.game_plays (round_id, hole, strokes) select id, 2, 11 from public.rounds$$, 'game strokes capped at 10');
+select pg_temp.fails($$insert into public.round_scores (round_id, hole, strokes) select id, 5, 9 from public.rounds$$,
+  'friend cannot write on A''s scorecard');
+update public.round_scores set strokes = 1;
+delete from public.round_scores;
 delete from public.rounds;
 reset role;
 select pg_temp.ok((select count(*) = 1 from public.rounds), 'friend cannot delete A''s round');
+select pg_temp.ok((select sum(strokes) = 8 from public.round_scores), 'friend could not change or delete A''s scores');
 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 set role authenticated;
 select pg_temp.ok((select count(*) = 0 from public.rounds), 'stranger C sees no rounds');
+select pg_temp.ok((select count(*) = 0 from public.round_scores), 'stranger C sees no scorecards');
+select pg_temp.ok((select count(*) = 0 from public.game_plays), 'stranger C sees no game plays');
+select pg_temp.fails($$insert into public.game_plays (round_id, hole, strokes)
+  values (current_setting('test.a_round')::uuid, 2, 4)$$, 'stranger C cannot play A''s round');
 select pg_temp.fails($$insert into public.rounds (course_id, nines, tee_time) values ('temecula-creek-inn', array['Creek','Creek'], now())$$,
   'same nine twice rejected');
 select pg_temp.fails($$insert into public.rounds (course_id, tee_time) values ('temecula-creek-inn', now())$$, '27-hole course needs nines');
@@ -121,9 +157,11 @@ reset role;
 -- Finish: coordinates wiped, still visible to friends for 4h.
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 set role authenticated;
+select pg_temp.ok((select count(*) = 1 from public.game_plays), 'A sees friends'' plays on their round');
 update public.rounds set status = 'done' where status = 'live';
 select pg_temp.ok((select finished_at is not null and last_lat is null and last_lng is null and last_fix_at is null from public.rounds),
   'finish stamps finished_at and wipes coordinates');
+select pg_temp.ok((select searching_since is null from public.rounds), 'finish clears the ball hunt');
 select pg_temp.fails($$update public.rounds set status = 'live'$$, 'finished round cannot restart');
 reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
@@ -133,6 +171,7 @@ reset role;
 update public.rounds set finished_at = now() - interval '5 hours' where user_id::text like '%a';
 set role authenticated;
 select pg_temp.ok((select count(*) = 0 from public.rounds), 'finished round hidden after 4h');
+select pg_temp.ok((select count(*) = 1 from public.game_plays), 'B still sees their own hole-game play after the round is hidden');
 reset role;
 
 -- Selected visibility: D shares with A only; B (also D's friend) must not see it.
@@ -188,9 +227,31 @@ reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 set role authenticated;
 select pg_temp.ok((select count(*) = 2 from public.courses), 'signed-in users read courses');
+select pg_temp.ok((select bool_and(jsonb_array_length(features->'bunkers') > 0 and jsonb_array_length(features->'water') > 0) from public.courses),
+  'signed-in users read mapped course features (bunkers, water)');
 select pg_temp.fails($$insert into public.courses (id, name, data) values ('x', 'x', '{}')$$, 'clients cannot write courses');
 select pg_temp.fails($$select * from public.share_links$$ || ' where false; insert into public.share_links (round_id, expires_at) select id, now() from public.rounds',
   'clients cannot create share links');
 reset role;
+
+-- Usernames, @-adds, and profile photos.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+set role authenticated;
+update public.profiles set username = 'cara.golf' where id = auth.uid();
+select pg_temp.ok((select username = 'cara.golf' from public.profiles where id = auth.uid()), 'set my @username');
+select pg_temp.fails($$update public.profiles set username = 'No Spaces!' where id = auth.uid()$$, 'username format enforced');
+update public.profiles set username = 'hijack' where id = '00000000-0000-0000-0000-00000000000a';
+reset role;
+select pg_temp.ok((select username is null from public.profiles where id = '00000000-0000-0000-0000-00000000000a'), 'cannot set someone else''s username');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+set role authenticated;
+select pg_temp.fails($$update public.profiles set username = 'cara.golf' where id = auth.uid()$$, 'usernames are unique');
+select pg_temp.ok((select public.request_friend('@Cara.Golf') = 'pending'), 'add a friend by @username (any case)');
+select pg_temp.fails($$select public.request_friend('@nobody.here')$$, 'unknown @username rejected');
+insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-00000000000d/me.jpg');
+select pg_temp.fails($$insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-00000000000a/me.jpg')$$,
+  'cannot upload into someone else''s photo folder');
+reset role;
+select pg_temp.ok((select count(*) = 1 from storage.objects), 'own profile photo uploaded');
 
 \warn 'All RLS tests passed.'
