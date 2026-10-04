@@ -1,4 +1,6 @@
-// The "People" panel: everyone you follow, Find My style. Tap a row for their round.
+// The "People" panel: everyone you're connected with, Find My style. Anyone out on the
+// course (or about to tee off) is at the top with a pulsing ring; everyone else is
+// greyed out, A to Z. Tap someone with a round to see it (and play their holes).
 import { useState } from "react";
 import type { LiveData } from "../lib/hooks";
 import type { Round } from "../lib/db";
@@ -12,88 +14,102 @@ import { Avatar } from "../components/Avatar";
 import { HoleStrip, PaceChip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
 
-export function People({ data, me, now, rounds, onOpen, onAddFriends }: {
+export function People({ data, me, now, rounds, query, onOpen, onAddPeople }: {
   data: LiveData;
   me: string;
   now: number;
   /** Already filtered by visibleRounds(). */
   rounds: Round[];
+  /** Name / @username filter from the search box ("" = everyone). */
+  query: string;
   onOpen: (roundId: string) => void;
-  onAddFriends: () => void;
+  onAddPeople: () => void;
 }) {
-  const nameOf = (id: string) => (id === me ? "You" : data.profiles.get(id)?.display_name || "Golfer");
+  const nameOf = (id: string) => data.profiles.get(id)?.display_name || "Golfer";
   const friendIds = data.friendships
     .filter((f) => f.status === "accepted")
     .map((f) => (f.user_id === me ? f.friend_id : f.user_id));
-  const out = new Set(rounds.map((r) => r.user_id));
-  const idle = friendIds.filter((id) => !out.has(id)).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
   const requests = data.friendships.filter((f) => f.status === "pending" && f.friend_id === me).length;
+  // Each friend's most relevant round: live beats finished.
+  const roundOf = new Map<string, Round>();
+  for (const r of rounds) if (r.user_id !== me && (!roundOf.has(r.user_id) || r.status === "live")) roundOf.set(r.user_id, r);
+
+  const q = query.trim().toLowerCase().replace(/^@/, "");
+  const matches = (id: string) => !q || nameOf(id).toLowerCase().includes(q) || (data.profiles.get(id)?.username ?? "").includes(q);
+  const people = friendIds.filter(matches);
+  const out = people.filter((id) => roundOf.get(id)?.status === "live").sort((a, b) => Date.parse(roundOf.get(a)!.tee_time) - Date.parse(roundOf.get(b)!.tee_time));
+  const rest = people.filter((id) => roundOf.get(id)?.status !== "live").sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
 
   if (!data.loaded) return <p className="empty">Loading…</p>;
 
-  return (
-    <div className="rows" aria-live="polite">
-      {requests > 0 && (
-        <button className="row-btn notice" onClick={onAddFriends}>
-          <span className="notice-dot" aria-hidden>{requests}</span>
-          <span className="row-main"><b>{requests === 1 ? "1 friend request" : `${requests} friend requests`}</b></span>
-          <Chevron />
-        </button>
-      )}
-      {rounds.map((r) => {
-        const info = roundInfo(r, data.courses.get(r.course_id), now);
-        if (!info) return null;
-        const { est, label, seq } = info;
-        const chip = paceChip(est);
-        const card = summarize(data.scores.get(r.id) ?? new Map(), seq.map((h) => h.par));
-        const status =
-          est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(r.tee_time))}`
-          : est.phase === "done" ? `Finished ${fmtTime(est.eta)}`
-          : `Hole ${r.hole}`;
-        return (
-          <button key={r.id} className="row-btn" onClick={() => onOpen(r.id)}>
-            <Avatar id={r.user_id} name={data.profiles.get(r.user_id)?.display_name || "Golfer"} me={r.user_id === me} badge={est.phase === "live" ? String(r.hole) : undefined} />
-            <span className="row-main">
-              <b>{nameOf(r.user_id)}</b>
-              <span className="sub mode-line">
-                {est.phase !== "done" && <ModeIcon mode={r.mode} size={15} />}{status}
-                {card.thru > 0 && <b className="score-chip">{fmtToPar(card.toPar)}</b>} · {label}
-              </span>
-              {r.searching_since && est.phase === "live" && (
-                <span className="hunt-sm">🔎 Looking for a ball · {fmtDur(now - Date.parse(r.searching_since))}</span>
-              )}
-              <span className="sub faint">Updated {ago(Date.parse(r.updated_at), now)}</span>
-            </span>
-            <span className="row-end">
-              {est.phase === "done" ? (
-                <span className="sub">Done</span>
-              ) : (
-                <>
-                  <b className="time">{fmtTime(est.eta)}</b>
-                  <span className={`tone ${chip.tone}`}>{est.phase === "pre" ? "est. finish" : chip.label}</span>
-                </>
-              )}
-            </span>
-          </button>
-        );
-      })}
-      {idle.map((id) => (
-        <div key={id} className="row-btn static">
-          <Avatar id={id} name={nameOf(id)} />
+  const row = (id: string, active: boolean) => {
+    const r = roundOf.get(id);
+    const p = data.profiles.get(id);
+    const info = r ? roundInfo(r, data.courses.get(r.course_id), now) : null;
+    if (!r || !info) {
+      return (
+        <div key={id} className="row-btn static idle">
+          <Avatar id={id} name={nameOf(id)} photo={p?.avatar_url} />
           <span className="row-main">
             <b>{nameOf(id)}</b>
-            <span className="sub">Not on the course</span>
+            <span className="sub">{p?.username ? `@${p.username}` : "Not on the course"}</span>
           </span>
         </div>
-      ))}
-      {!rounds.length && !idle.length && (
-        <div className="empty">
-          <b>Nobody here yet</b>
-          <span>Add friends to see which hole they're on and when they'll be done.</span>
-          <button className="btn" onClick={onAddFriends}>Add friends</button>
+      );
+    }
+    const { est, label, seq } = info;
+    const chip = paceChip(est);
+    const card = summarize(data.scores.get(r.id) ?? new Map(), seq.map((h) => h.par));
+    const status =
+      est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(r.tee_time))}`
+      : est.phase === "done" ? `Finished ${fmtTime(est.eta)}`
+      : `Hole ${r.hole}`;
+    return (
+      <button key={id} className={`row-btn${active ? "" : " idle"}`} onClick={() => onOpen(r.id)}>
+        <Avatar id={id} name={nameOf(id)} photo={p?.avatar_url} live={active} badge={est.phase === "live" ? String(r.hole) : undefined} />
+        <span className="row-main">
+          <b>{nameOf(id)}</b>
+          <span className="sub mode-line">
+            {active && <ModeIcon mode={r.mode} size={15} />}{status}
+            {card.thru > 0 && <b className="score-chip">{fmtToPar(card.toPar)}</b>} · {label}
+          </span>
+          {r.searching_since && est.phase === "live" && (
+            <span className="hunt-sm">🔎 Looking for a ball · {fmtDur(now - Date.parse(r.searching_since))}</span>
+          )}
+          {active && <span className="sub faint">Updated {ago(Date.parse(r.updated_at), now)}</span>}
+        </span>
+        {active && (
+          <span className="row-end">
+            <b className="time">{fmtTime(est.eta)}</b>
+            <span className={`tone ${chip.tone}`}>{est.phase === "pre" ? "est. finish" : chip.label}</span>
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <>
+      {requests > 0 && (
+        <div className="rows">
+          <button className="row-btn notice" onClick={onAddPeople}>
+            <span className="notice-dot" aria-hidden>{requests}</span>
+            <span className="row-main"><b>{requests === 1 ? "1 friend request" : `${requests} friend requests`}</b></span>
+            <Chevron />
+          </button>
         </div>
       )}
-    </div>
+      {out.length > 0 && <div className="rows" aria-live="polite">{out.map((id) => row(id, true))}</div>}
+      {rest.length > 0 && <div className="rows">{rest.map((id) => row(id, false))}</div>}
+      {!friendIds.length && (
+        <div className="empty">
+          <b>No one here yet</b>
+          <span>Add the people you golf with (or wait for) to see which hole they're on.</span>
+          <button className="btn" onClick={onAddPeople}>Add people</button>
+        </div>
+      )}
+      {friendIds.length > 0 && !people.length && <p className="empty">No one matches “{query}”.</p>}
+    </>
   );
 }
 

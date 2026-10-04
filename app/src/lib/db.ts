@@ -8,6 +8,9 @@ export interface Profile {
   id: string;
   display_name: string;
   friend_code: string;
+  /** Unique @handle (without the @); null until they pick one. */
+  username: string | null;
+  avatar_url: string | null;
 }
 
 export interface Friendship {
@@ -49,11 +52,32 @@ function check<T>(res: { data: T | null; error: { message: string } | null }): T
 
 export async function getProfiles(ids: string[]): Promise<Profile[]> {
   if (!ids.length) return [];
-  return check(await supabase.from("profiles").select("id, display_name, friend_code").in("id", ids));
+  return check(await supabase.from("profiles").select("id, display_name, friend_code, username, avatar_url").in("id", ids));
 }
 
 export async function setDisplayName(id: string, name: string) {
   check(await supabase.from("profiles").update({ display_name: name.trim().slice(0, 40) }).eq("id", id));
+}
+
+export const USERNAME_RE = /^[a-z0-9_.]{3,20}$/;
+
+/** Claim a unique @username (lowercase letters, numbers, _ and .). */
+export async function setUsername(id: string, username: string) {
+  const u = username.trim().replace(/^@/, "").toLowerCase();
+  if (!USERNAME_RE.test(u)) throw new Error("3–20 characters: letters, numbers, _ or .");
+  const res = await supabase.from("profiles").update({ username: u }).eq("id", id);
+  if (res.error?.code === "23505") throw new Error(`@${u} is taken. Try another.`);
+  check(res);
+}
+
+/** Upload a profile photo (already resized to a small JPEG) and point the profile at it. */
+export async function setAvatar(id: string, photo: Blob) {
+  const path = `${id}/${Date.now()}.jpg`; // new name each time so caches refresh
+  const up = await supabase.storage.from("avatars").upload(path, photo, { contentType: "image/jpeg", upsert: false });
+  if (up.error) throw new Error(up.error.message);
+  const url = supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+  check(await supabase.from("profiles").update({ avatar_url: url }).eq("id", id));
+  return url;
 }
 
 // ------------------------------------------------------------------ friends
@@ -62,6 +86,7 @@ export async function listFriendships(): Promise<Friendship[]> {
   return check(await supabase.from("friendships").select("*").order("created_at", { ascending: false }));
 }
 
+/** By friend code or @username. */
 export async function requestFriend(code: string): Promise<"pending" | "accepted"> {
   return check(await supabase.rpc("request_friend", { code }));
 }
@@ -204,6 +229,8 @@ export interface GamePlay {
   hole: number;
   player_id: string;
   strokes: number;
+  /** The real score they were trying to beat, if there was one. */
+  to_beat: number | null;
   created_at: string;
 }
 
@@ -213,8 +240,20 @@ export async function getPlaysFor(roundIds: string[]): Promise<GamePlay[]> {
   return check(await supabase.from("game_plays").select("*").in("round_id", roundIds).order("created_at"));
 }
 
-export async function recordPlay(roundId: string, hole: number, strokes: number) {
-  check(await supabase.from("game_plays").insert({ round_id: roundId, hole, strokes }));
+export async function recordPlay(roundId: string, hole: number, strokes: number, toBeat?: number) {
+  check(await supabase.from("game_plays").insert({ round_id: roundId, hole, strokes, to_beat: toBeat ?? null }));
+}
+
+/** Everything for your profile: all your finished/stopped rounds, their scorecards, your hole-game plays. */
+export async function getMyHistory(me: string): Promise<{ rounds: Round[]; scores: Map<string, Map<number, number>>; plays: GamePlay[] }> {
+  const rounds: Round[] = check(
+    await supabase.from("rounds").select("*").eq("user_id", me).neq("status", "live").order("tee_time", { ascending: false }).limit(200),
+  );
+  const [scores, plays] = await Promise.all([
+    getScoresFor(rounds.map((r) => r.id)),
+    supabase.from("game_plays").select("*").eq("player_id", me).then((res) => check(res) as GamePlay[]),
+  ]);
+  return { rounds, scores, plays };
 }
 
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */

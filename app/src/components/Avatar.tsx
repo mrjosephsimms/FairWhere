@@ -1,4 +1,5 @@
-// Initials avatar with a stable per-person colour (no photos yet).
+// Profile photo, or initials with a stable per-person colour. A pulsing green ring
+// marks someone who's out on the course (or about to tee off).
 
 const COLORS = ["#2f8f5b", "#3478f6", "#e8743b", "#a259d9", "#d94f70", "#1f9bb5", "#c99a1a", "#5b6ee1"];
 
@@ -14,10 +15,18 @@ export function colorFor(id: string): string {
   return COLORS[h % COLORS.length];
 }
 
-export function Avatar({ id, name, size = 52, badge, me }: { id: string; name: string; size?: number; badge?: string; me?: boolean }) {
+export function Avatar({ id, name, photo, size = 52, badge, me, live }: {
+  id: string;
+  name: string;
+  photo?: string | null;
+  size?: number;
+  badge?: string;
+  me?: boolean;
+  live?: boolean;
+}) {
   return (
-    <span className={`avatar${me ? " me" : ""}`} style={{ width: size, height: size, background: colorFor(id), fontSize: size * 0.36 }} aria-hidden>
-      {initials(name)}
+    <span className={`avatar${me ? " me" : ""}${live ? " live" : ""}`} style={{ width: size, height: size, background: colorFor(id), fontSize: size * 0.36 }} aria-hidden>
+      {photo ? <img src={photo} alt="" loading="lazy" /> : initials(name)}
       {badge && <span className="badge">{badge}</span>}
     </span>
   );

@@ -14,6 +14,7 @@ import { SignIn } from "./screens/SignIn";
 import { People, RoundDetail } from "./screens/People";
 import { MyRound } from "./screens/MyRound";
 import { Me } from "./screens/Me";
+import { AddPeople } from "./screens/AddPeople";
 
 type Tab = "people" | "round" | "me";
 
@@ -61,6 +62,8 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const [sheetPx, setSheetPx] = useState(0);
   const [recenter, setRecenter] = useState(0);
   const [game, setGame] = useState<number | null>(null); // hole being played on the selected round
+  const [adding, setAdding] = useState(false); // the "Add people" sheet (the + on People)
+  const [search, setSearch] = useState<string | null>(null); // People search box (null = closed)
 
   const rounds = useMemo(() => visibleRounds(data.rounds, now), [data.rounds, now]);
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
@@ -81,7 +84,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const gps = useRoundTracker(live, liveSeq);
 
   useEffect(() => {
-    if (invite) (setTab("me"), setDetent("full"));
+    if (invite) (setTab("people"), setSelected(null), setAdding(true), setDetent("full"));
   }, [invite]);
   useEffect(() => {
     if (selected && !sel) (setSelected(null), setGame(null)); // their round ended or dropped off
@@ -107,7 +110,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         const pos = r.id === live?.id && gps.fix ? gps.fix.pt : info && roundPosition(r, info.seq, info.est, now);
         if (!info || !pos) return [];
         const name = data.profiles.get(r.user_id)?.display_name || "Golfer";
-        return [{ id: r.id, lat: pos[0], lng: pos[1], name, me: r.user_id === me, selected: r.id === selected,
+        return [{ id: r.id, lat: pos[0], lng: pos[1], name, photo: data.profiles.get(r.user_id)?.avatar_url, me: r.user_id === me, selected: r.id === selected,
           badge: info.est.phase === "live" ? String(r.hole) : undefined }];
       }),
     [rounds, data.courses, data.profiles, now, me, selected, live?.id, gps.fix],
@@ -137,6 +140,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   function openRound(id: string) {
     setGame(null);
+    setAdding(false);
     setSelected(id);
     setTab("people");
     setDetent("mid");
@@ -145,25 +149,43 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     setTab(t);
     setSelected(null);
     setGame(null);
+    setAdding(false);
     if (t !== "people" && detent === "peek") setDetent("mid");
   }
 
-  const title = sel
+  const openAdding = () => (setSelected(null), setAdding(true), setDetent("full"));
+  const title = adding
+    ? "Add people"
+    : sel
     ? sel.user_id === me ? "Your round" : data.profiles.get(sel.user_id)?.display_name || "Golfer"
-    : tab === "people" ? "People" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Me";
+    : tab === "people" ? "People" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Profile";
 
   const header = (
     <div className="sheet-head">
-      {sel && (
-        <button className="icon-btn" aria-label="Back to people" onClick={() => setSelected(null)}>
+      {(sel || adding) && (
+        <button className="icon-btn" aria-label="Back to people" onClick={() => (setSelected(null), setAdding(false))}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="m15 6-6 6 6 6" /></svg>
         </button>
       )}
-      <h2>{title}</h2>
-      {tab === "people" && !sel && (
-        <button className="icon-btn" aria-label="Add a friend" onClick={() => (go("me"), setDetent("full"))}>
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 5v14M5 12h14" /></svg>
-        </button>
+      {tab === "people" && !sel && !adding && search !== null ? (
+        <input className="search" autoFocus value={search} placeholder="Search name or @username" aria-label="Search people"
+          onChange={(e) => setSearch(e.target.value)} />
+      ) : (
+        <h2>{title}</h2>
+      )}
+      {tab === "people" && !sel && !adding && (
+        <>
+          <button className="icon-btn" aria-label={search !== null ? "Close search" : "Search people"} onClick={() => setSearch(search !== null ? null : "")}>
+            {search !== null ? (
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+            )}
+          </button>
+          <button className="icon-btn" aria-label="Add people" onClick={openAdding}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </>
       )}
     </div>
   );
@@ -177,15 +199,17 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       {live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
       {data.error && <p className="toast err" role="alert">Couldn't refresh: {data.error}</p>}
 
-      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header} view={sel?.id ?? tab}>
-        {sel ? (
+      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header} view={adding ? "adding" : sel?.id ?? tab}>
+        {adding ? (
+          <AddPeople data={data} me={me} incomingCode={invite} onCodeUsed={clearInvite} />
+        ) : sel ? (
           <RoundDetail round={sel} data={data} me={me} now={now} onPlay={setGame} />
         ) : tab === "people" ? (
-          <People data={data} me={me} now={now} rounds={rounds} onOpen={openRound} onAddFriends={() => (go("me"), setDetent("full"))} />
+          <People data={data} me={me} now={now} rounds={rounds} query={search ?? ""} onOpen={openRound} onAddPeople={openAdding} />
         ) : tab === "round" ? (
           <MyRound data={data} me={me} now={now} gps={gps} />
         ) : (
-          <Me data={data} me={me} incomingCode={invite} onCodeUsed={clearInvite} />
+          <Me data={data} me={me} now={now} />
         )}
       </Sheet>
 
