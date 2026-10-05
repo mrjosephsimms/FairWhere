@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { phoneSignInEnabled, supabase } from "../lib/supabase";
 import { authRedirect, signInWithProvider } from "../lib/native";
 import { prettyPhone, toE164 } from "../lib/phone";
+import { PasswordInput } from "../components/PasswordInput";
 
 type Via = "email" | "phone";
 
@@ -14,6 +15,9 @@ export function SignIn() {
   const [phone, setPhone] = useState("");
   const [sentTo, setSentTo] = useState<{ via: Via; to: string } | null>(null);
   const [code, setCode] = useState("");
+  // People who made a password (Me tab / Edit profile) can skip the code.
+  const [usePw, setUsePw] = useState(false);
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -31,6 +35,20 @@ export function SignIn() {
 
   async function send(e: FormEvent) {
     e.preventDefault();
+    if (usePw) {
+      const num = via === "phone" ? toE164(phone) : null;
+      if (via === "phone" && !num) return setErr("Enter a 10-digit phone number (or + country code).");
+      await run(async () => {
+        const { error } = num
+          ? await supabase.auth.signInWithPassword({ phone: num, password })
+          : await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        // Supabase says "Invalid login credentials" for both wrong passwords and no password set.
+        return { error: error && /invalid login/i.test(error.message)
+          ? { message: "That password doesn't match. Forgot it, or never made one? Get a code instead." }
+          : error };
+      });
+      return;
+    }
     if (via === "email") {
       const addr = email.trim();
       if (await run(() => supabase.auth.signInWithOtp({ email: addr, options: { emailRedirectTo: authRedirect() } })))
@@ -82,7 +100,7 @@ export function SignIn() {
                 <input type="email" autoComplete="email" inputMode="email" required value={email}
                   onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
               </label>
-              <button className="btn" disabled={busy || !email.trim()}>Email me a sign-in link</button>
+              {!usePw && <button className="btn" disabled={busy || !email.trim()}>Email me a sign-in link</button>}
             </>
           ) : (
             <>
@@ -91,9 +109,21 @@ export function SignIn() {
                 <input type="tel" autoComplete="tel" inputMode="tel" required value={phone}
                   onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-0123" />
               </label>
-              <button className="btn" disabled={busy || !phone.trim()}>Text me a code</button>
+              {!usePw && <button className="btn" disabled={busy || !phone.trim()}>Text me a code</button>}
             </>
           )}
+          {usePw && (
+            <>
+              <label className="f">
+                Password
+                <PasswordInput value={password} onChange={setPassword} />
+              </label>
+              <button className="btn" disabled={busy || !password || !(via === "email" ? email.trim() : phone.trim())}>Sign in</button>
+            </>
+          )}
+          <button type="button" className="link center" onClick={() => (setUsePw(!usePw), setErr(null))}>
+            {usePw ? `Forgot it? ${via === "email" ? "Email" : "Text"} me a code instead` : "Have a password? Sign in with it"}
+          </button>
         </form>
       ) : (
         <form onSubmit={verify}>

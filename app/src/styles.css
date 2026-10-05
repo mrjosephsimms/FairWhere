@@ -434,4 +434,13 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
   position: relative; z-index: 2; width: min(460px, calc(100% - 24px)); margin-bottom: calc(12px + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, .94); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: var(--shadow); border-radius: 26px; padding: 22px;
 }
-.signin h1 { margin-bottom: 6px; text-align: center; }
+.signin h1 { margin-bottom: 6px; text-align: center; text-transform: none; font-size: 34px; }
+
+/* ------------------------------------------------------------- passwords */
+.pw-input { display: flex; align-items: center; gap: 6px; }
+.pw-input input { flex: 1; min-width: 0; }
+.pw-toggle { border: 0; background: none; padding: 8px 4px; font: 600 14px var(--body); color: var(--accent); cursor: pointer; }
+.pw-form { display: grid; gap: 10px; }
+.pw-form .actions { display: flex; gap: 8px; }
+.pw-form .actions .btn { flex: 1; }
+.link.center { display: block; margin: 4px auto 0; }

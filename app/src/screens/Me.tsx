@@ -16,6 +16,8 @@ import { HoleStrip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
 import { LocationSharing } from "./LocationSharing";
 import { CourseSearch } from "../components/CourseSearch";
+import { PasswordForm } from "../components/PasswordForm";
+import { dismissPasswordPrompt, hasPassword, shouldAskForPassword, useAuthUser } from "../lib/password";
 
 interface History {
   rounds: Round[];
@@ -57,6 +59,7 @@ export function Me({ data, me, now, onEdit }: { data: LiveData; me: string; now:
   return (
     <div className="list">
       <ProfileHeader data={data} me={me} onEdit={onEdit} />
+      <PasswordPrompt />
       <LocationSharing data={data} me={me} />
 
       {histErr && <p className="note err">Couldn't load your stats: {histErr}</p>}
@@ -120,8 +123,29 @@ function ProfileHeader({ data, me, onEdit }: { data: LiveData; me: string; onEdi
 }
 
 /** Edit profile: photo (tap to change), name, the unique @username, and your home course. */
+/** First visit after signing up with a code: offer a password, once. */
+function PasswordPrompt() {
+  const user = useAuthUser();
+  const [saved, setSaved] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  if (saved)
+    return <section className="card"><p className="note">🔒 Password saved. Next time, sign in with it. No code needed.</p></section>;
+  if (!shouldAskForPassword(user)) return null;
+  return (
+    <section className="card pw-prompt">
+      <span className="label">🔒 Make a password?</span>
+      <p className="note">Sign in faster next time, without waiting for a code. Optional, and you can add one later in Edit profile.</p>
+      <PasswordForm label="New password" cta="Save password" onSaved={() => setSaved(true)}>
+        <button type="button" className="btn ghost" disabled={skipping}
+          onClick={() => (setSkipping(true), dismissPasswordPrompt().finally(() => setSkipping(false)))}>Not now</button>
+      </PasswordForm>
+    </section>
+  );
+}
+
 export function EditProfile({ data, me }: { data: LiveData; me: string }) {
   const profile = data.profiles.get(me);
+  const user = useAuthUser();
   const { busy, err, run } = useAction(data.reload);
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
@@ -185,6 +209,10 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
             <button type="button" className="link" onClick={() => run(() => setHomeCourse(me, null))}>Clear home course</button>
           )}
         </div>
+        {user && (
+          <PasswordForm label={hasPassword(user) ? "Change password" : "Password (optional, sign in without a code)"}
+            cta={hasPassword(user) ? "Change" : "Save"} />
+        )}
       </div>
       {err && <p className="note err" role="alert">{err}</p>}
     </section>
