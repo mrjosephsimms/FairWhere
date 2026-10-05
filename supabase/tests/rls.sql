@@ -32,7 +32,12 @@ select pg_temp.ok((select count(*) = 4 from public.profiles), 'signup trigger cr
 select pg_temp.ok((select display_name = 'Sunny' from public.profiles where id::text like '%a'), 'display name from full_name');
 select pg_temp.ok((select display_name = 'bob' from public.profiles where id::text like '%b'), 'display name falls back to email');
 select pg_temp.ok((select bool_and(friend_code ~ '^[A-HJ-KMNP-Z2-9]{6}$') from public.profiles), 'friend codes are 6 unambiguous chars');
-select pg_temp.ok((select count(*) = 2 from public.courses), 'courses seeded');
+select pg_temp.ok((select count(*) >= 2 from public.courses)
+  and exists (select 1 from public.courses where id = 'redhawk')
+  and exists (select 1 from public.courses where id = 'temecula-creek-inn'), 'courses seeded (Redhawk, Temecula Creek and more)');
+select pg_temp.ok((select bool_and(jsonb_array_length(data->'holes') >= 18 and data->>'id' = id
+                                   and (nines is null) = (jsonb_typeof(data->'nines') = 'null')) from public.courses),
+  'every seeded course has its holes and matching id / nines');
 
 -- Codes for the tests (read as superuser).
 create temp table codes as select display_name, friend_code, id from public.profiles;
@@ -226,8 +231,10 @@ select pg_temp.ok((select count(*) = 0 from public.courses), 'anon sees no cours
 reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
 set role authenticated;
-select pg_temp.ok((select count(*) = 2 from public.courses), 'signed-in users read courses');
-select pg_temp.ok((select bool_and(jsonb_array_length(features->'bunkers') > 0 and jsonb_array_length(features->'water') > 0) from public.courses),
+select pg_temp.ok((select count(*) >= 2 from public.courses)
+  and (select count(*) = 2 from public.courses where id in ('redhawk', 'temecula-creek-inn')), 'signed-in users read courses');
+select pg_temp.ok((select bool_and(jsonb_array_length(features->'bunkers') > 0 and jsonb_array_length(features->'water') > 0)
+                   from public.courses where id in ('redhawk', 'temecula-creek-inn')),
   'signed-in users read mapped course features (bunkers, water)');
 select pg_temp.fails($$insert into public.courses (id, name, data) values ('x', 'x', '{}')$$, 'clients cannot write courses');
 select pg_temp.fails($$select * from public.share_links$$ || ' where false; insert into public.share_links (round_id, expires_at) select id, now() from public.rounds',

@@ -10,3 +10,5 @@ supabase/.temp/
 supabase/.branches/
 .apple/
 *.p8
+scripts/.osm_cache/
+__pycache__/

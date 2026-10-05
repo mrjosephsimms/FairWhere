@@ -57,6 +57,15 @@ node scripts/gen_course_seed.mjs supabase/migrations/<new timestamp>_seed_course
 
 Verify the par of any hole marked `parInferred: true` against the real scorecard. Redhawk 10–18 and all of Creek are inferred.
 
+Bulk import (every public course in Southern California that OSM maps hole by hole; Overpass +
+OSM map API, raw responses cached in the gitignored `scripts/.osm_cache/`):
+
+```sh
+python3 scripts/import_region.py --dry-run --no-features --report /tmp/report.json   # what would be added / skipped, and why
+python3 scripts/import_region.py                                                     # rewrite data/courses.json (existing courses kept as is)
+node scripts/gen_course_seed.mjs "supabase/migrations/<timestamp>_%d.sql" --split 6000000 --exclude redhawk,temecula-creek-inn
+```
+
 ## Privacy model (enforced in the database)
 
 - A round is visible only to its owner and to **accepted** friends: while live (and updated in the last 6h), or for 4h after it finishes. "Selected" rounds are visible only to the listed friends.

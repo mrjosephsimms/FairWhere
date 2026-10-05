@@ -10,6 +10,8 @@ Not every course has holes mapped in OSM; the script says so if none are found.
 (Overpass API was unreachable from the build sandbox; the plain map API works.)
 """
 import json, math, sys, urllib.parse, urllib.request, argparse, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from osm_http import write_courses  # noqa: E402
 
 UA = {"User-Agent": "find-my-golfer/0.1 (course import)"}
 
@@ -56,7 +58,7 @@ def main():
     path = pathlib.Path(__file__).resolve().parent.parent / "data" / "courses.json"
     db = json.loads(path.read_text())
     db["courses"] = [c for c in db["courses"] if c["id"] != course["id"]] + [course]
-    path.write_text(json.dumps(db, indent=1))
+    write_courses(path, db)
     print(f"Saved {course['name']}: {len(holes)} holes, {sum(x['parInferred'] for x in holes)} inferred pars.")
 
 if __name__ == "__main__":

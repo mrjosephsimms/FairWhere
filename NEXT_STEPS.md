@@ -42,6 +42,13 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   plus a Google OAuth client. Email sign-in works without them.
 - Open product questions from `docs/handoff/HANDOFF.md` §8 (spectator links, showing scores).
 
+## Southern California courses (PR "Southern California public courses (OSM)")
+- 242 OSM-mapped public SoCal courses added to `data/courses.json` by `scripts/import_region.py`; seed in
+  `supabase/migrations/20261005000001/2_seed_socal_courses.sql`. **Not applied to the live project yet.**
+- Before applying: decide on the "unsure access" country clubs / military courses and rename the placeholder
+  course/nine names listed in the PR. `listCourses()` loads `data` for every course (a few MB with 244 courses):
+  switch the course picker to `id, name, address, nines` and fetch `data` on pick.
+
 ## Then: Milestone 3 (background GPS)
 - Port the patch-package fix for `@capacitor-community/background-geolocation@1.2.26` from the SaleMap
   repo (`frontend/patches/…` + `postinstall`); see CLAUDE.md.
