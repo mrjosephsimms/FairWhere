@@ -158,10 +158,10 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   const focus: MapFocus = (() => {
     const key = `${tab}|${focusRound?.id ?? ""}|${data.loaded}|${pins.length > 0}|${course ? 1 : 0}|${recenter}`;
-    // Live: frame the hole they're on. Otherwise the whole course.
+    // Live: frame the hole they're on (and fly to the next one when it changes). Otherwise the whole course.
     if (course) {
       const on = course.seq.find((h) => h.n === course.current); // by number: a game overlay holds just one hole
-      return { key, bounds: courseBounds(on ? [on] : course.seq) };
+      return on ? { key: `${key}|h${on.n}`, bounds: courseBounds([on]), zoom: 18 } : { key, bounds: courseBounds(course.seq) };
     }
     const spot = person ? data.spots.find((s) => s.user_id === person) : undefined;
     if (spot) return { key: `${key}|spot-${person}`, center: [spot.lng, spot.lat], zoom: 15 };
