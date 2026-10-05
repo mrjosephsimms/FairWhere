@@ -12,13 +12,13 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   network policy blocked `*.supabase.co`.
 
 ## Supabase project — set up 2026-10-03 (local Mac session)
-- Project: **FindMyGolfer**, ref `uvyeenrkkvvsizszdizv`, URL `https://uvyeenrkkvvsizszdizv.supabase.co`,
+- Project: **FindMyGolfer** (the app is now named FairWhere), ref `uvyeenrkkvvsizszdizv`, URL `https://uvyeenrkkvvsizszdizv.supabase.co`,
   us-east-1, free plan. Separate from SaleMap's project, as intended. Repo is `supabase link`ed.
 - [x] Migrations 01–03 applied with `supabase db push --linked`. Verified: 6 public tables all RLS-on,
       `courses` = 2 rows, cron `expire-stale-rounds` (*/15) active, `rounds` + `friendships` in `supabase_realtime`.
       (01 needed `pgcrypto` → `extensions` schema: hosted Supabase installs extensions there.)
 - [x] Auth config pushed from `supabase/config.toml` (`supabase config push`): site URL `http://localhost:5180`,
-      redirect URLs `findmygolfer://auth-callback` + `http://localhost:5180` (+ `/**`), email OTP length 8 → 6.
+      redirect URLs `fairwhere://auth-callback` + `http://localhost:5180` (+ `/**`), email OTP length 8 → 6.
 - [x] `app/.env` written (URL + `sb_publishable_…` key; gitignored, local to this Mac).
 - [x] Custom SMTP (Gmail app password, mrjosephsimms@gmail.com) set in the dashboard by Sunny; email rate limit 30/h.
 - [x] Magic-link email with the 6-digit code pushed (`supabase/templates/magic_link.html`). Use the code when the
@@ -32,12 +32,13 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
    (Realtime). If it doesn't, check that `rounds` and `friendships` are in Database → Publications →
    `supabase_realtime`.
 4. Finish the round: B should see "Finished hh:mm"; A's `last_lat/last_lng` in the table must be null.
-5. `npm run ios` → run in the iOS Simulator; test the email link (opens `findmygolfer://auth-callback`).
+5. `npm run ios` → run in the iOS Simulator; test the email link (opens `fairwhere://auth-callback`).
 
 ## Open decisions for Sunny
-- **Bundle ID**: `com.sunnysimms.findmygolfer` is a placeholder (`app/capacitor.config.ts` + Xcode project).
-  It can't be renamed after the App ID is registered with Apple, so confirm it first.
-- Domain: none yet. One would be needed for the v1.1 web share link and https invite links.
+- **Name decided 2026-10-04: FairWhere.** Bundle ID `com.sunnysimms.fairwhere`, URL scheme `fairwhere://`.
+  To do (Sunny): buy fairwhere.app (+ fairwhere.golf), quick check at tmsearch.uspto.gov, and change the SMTP
+  sender name in Supabase (Auth -> Emails -> SMTP) to "FairWhere". Then point `addLink()` at the live domain.
+- Domain: fairwhere.app (to buy). Needed for https invite/QR links and the v1.1 web share link.
 - Apple / Google sign-in: needs an App ID, Services ID and Sign in with Apple key on team `8424XCN267`,
   plus a Google OAuth client. Email sign-in works without them.
 - Open product questions from `docs/handoff/HANDOFF.md` §8 (spectator links, showing scores).
@@ -57,6 +58,6 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   (distance, candidate hole, fix count) for the Redhawk field test.
 
 ## Related: Yard Sale Club (SaleMap) stays live
-- Decided 2026-10-04: Yard Sale Club is **not** being shelved. Find My Golfer launches as its own App Store app
+- Decided 2026-10-04: Yard Sale Club is **not** being shelved. FairWhere launches as its own App Store app
   (own repo, Supabase project and bundle ID; shares only the Apple Developer team). Don't merge SaleMap's draft
   ARCHIVE.md PR (#70).

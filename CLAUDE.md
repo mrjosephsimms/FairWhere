@@ -1,6 +1,6 @@
-# Find My Golfer — Claude Code project rules
+# FairWhere — Claude Code project rules
 
-Live golf round sharing. **Start with `NEXT_STEPS.md`** (current state + pending setup). Spec: `docs/handoff/HANDOFF.md` (written as "Tee Tracker"; the product is now **Find My Golfer**). Setup + status: `README.md`.
+Live golf round sharing. **Start with `NEXT_STEPS.md`** (current state + pending setup). Spec: `docs/handoff/HANDOFF.md` (written as "Tee Tracker"; the product was later "Find My Golfer" and is now **FairWhere**: fairwhere.app, bundle ID `com.sunnysimms.fairwhere`, URL scheme `fairwhere://`; the repo and folder keep the old FindMyGolfer name). Setup + status: `README.md`.
 
 ## Separation
 - Separate product from Yardsale Club (SaleMap) and from El Blunto: its own repo, own Supabase project, own bundle ID.

@@ -12,7 +12,7 @@ Then: node scripts/gen_course_seed.mjs supabase/migrations/<new>.sql
 """
 import json, pathlib, sys, urllib.request
 
-UA = {"User-Agent": "find-my-golfer/0.1 (course features import)"}
+UA = {"User-Agent": "fairwhere/0.1 (course features import)"}
 PAD = 0.0025  # ~250 m around the holes
 
 def get(url):

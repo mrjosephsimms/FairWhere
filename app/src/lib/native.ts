@@ -2,10 +2,10 @@
 // Same pattern as Yardsale Club's lib/nativeAuth.ts:
 //   1. Ask Supabase for the provider URL with redirectTo = our URL scheme.
 //   2. Open it in the system browser sheet (Google refuses embedded WebViews).
-//   3. Provider -> Supabase -> 302 to findmygolfer://auth-callback?code=...
+//   3. Provider -> Supabase -> 302 to fairwhere://auth-callback?code=...
 //      which reopens the app; we exchange the PKCE code for a session.
 // The scheme is registered in ios/App/App/Info.plist (CFBundleURLTypes), and
-// findmygolfer://auth-callback must be on Supabase's Redirect URLs allowlist.
+// fairwhere://auth-callback must be on Supabase's Redirect URLs allowlist.
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
@@ -13,7 +13,7 @@ import { Share } from "@capacitor/share";
 import { supabase } from "./supabase";
 
 export const isNative = Capacitor.isNativePlatform();
-export const SCHEME = "findmygolfer";
+export const SCHEME = "fairwhere";
 export const AUTH_REDIRECT = `${SCHEME}://auth-callback`;
 
 /** Where email links and OAuth should land. */
@@ -36,9 +36,9 @@ export const inviteLink = (code: string) => `${SCHEME}://add/${code}`;
  * goes in texts and the QR code, so any phone camera can open it. Until the app has
  * its own domain it points at wherever this copy is being served from.
  */
-export const addLink = (code: string) => `${isNative ? "https://findmygolfer.app" : window.location.origin}/?add=${encodeURIComponent(code)}`;
+export const addLink = (code: string) => `${isNative ? "https://fairwhere.app" : window.location.origin}/?add=${encodeURIComponent(code)}`;
 
-const PENDING_ADD = "fmg.pendingAdd";
+const PENDING_ADD = "fairwhere.pendingAdd";
 /** Remember an ?add= code across sign-in (the magic link comes back without the query). */
 export function takePendingAdd(): string | null {
   try {
@@ -50,10 +50,10 @@ export function takePendingAdd(): string | null {
   }
 }
 
-/** Pull a friend code out of an invite link (findmygolfer://add/ABC234). */
+/** Pull a friend code or @username out of an invite link (fairwhere://add/ABC234, fairwhere://add/@sam). */
 export function codeFromUrl(url: string): string | null {
-  const m = url.match(/^findmygolfer:\/\/add\/([A-Za-z0-9]{6})\b/);
-  return m ? m[1].toUpperCase() : null;
+  const m = url.match(/^fairwhere:\/\/add\/(@[a-z0-9_.]{3,20}|[A-Za-z0-9]{6})\b/i);
+  return m ? (m[1].startsWith("@") ? m[1].toLowerCase() : m[1].toUpperCase()) : null;
 }
 
 /** Install deep-link handling once at startup. */
@@ -88,8 +88,8 @@ export function initDeepLinks(onInvite: (code: string) => void): void {
 export async function shareText(text: string, url?: string): Promise<"shared" | "copied"> {
   if (isNative || navigator.share) {
     try {
-      if (isNative) await Share.share({ title: "Find My Golfer", text, url });
-      else await navigator.share({ title: "Find My Golfer", text, url });
+      if (isNative) await Share.share({ title: "FairWhere", text, url });
+      else await navigator.share({ title: "FairWhere", text, url });
       return "shared";
     } catch {
       /* cancelled: fall through to copy */
@@ -101,12 +101,12 @@ export async function shareText(text: string, url?: string): Promise<"shared" | 
 
 /** Invite someone new: your code plus a link that signs them up and adds you. */
 export function shareInvite(code: string, name: string) {
-  return shareText(`Join me on Find My Golfer${name ? ` (${name})` : ""} so you can see which hole I'm on. Sign up and add me with code ${code}:`, addLink(code));
+  return shareText(`Join me on FairWhere${name ? ` (${name})` : ""} so you can see which hole I'm on. Sign up and add me with code ${code}:`, addLink(code));
 }
 
 /** Share your profile: your @username and the same add-me link. */
 export function shareProfile(code: string, name: string, username: string | null) {
-  return shareText(`Find me on Find My Golfer: ${name}${username ? ` (@${username})` : ""}.`, addLink(username ? `@${username}` : code));
+  return shareText(`Find me on FairWhere: ${name}${username ? ` (@${username})` : ""}.`, addLink(username ? `@${username}` : code));
 }
 
 /** Fire when the app comes back to the foreground (refetch stale lists). */

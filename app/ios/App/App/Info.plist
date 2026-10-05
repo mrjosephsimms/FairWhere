@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Find My Golfer</string>
+        <string>FairWhere</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -70,16 +70,16 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.sunnysimms.findmygolfer</string>
+			<string>com.sunnysimms.fairwhere</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>findmygolfer</string>
+				<string>fairwhere</string>
 			</array>
 		</dict>
 	</array>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Only if you turn on everyday location sharing: lets the people you chose see where you are even when the app is closed. Off unless you share with someone, and you can stop anytime.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Find My Golfer uses your location during a round you choose to share, to work out which hole you're on so friends can see your progress and finish time. Sharing stops when the round ends.</string>
+	<string>FairWhere uses your location during a round you choose to share, to work out which hole you're on so friends can see your progress and finish time. Sharing stops when the round ends.</string>
 </dict>
 </plist>
