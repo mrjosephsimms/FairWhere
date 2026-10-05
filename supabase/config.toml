@@ -11,6 +11,11 @@ additional_redirect_urls = ["fairwhere://auth-callback", "http://localhost:5180"
 subject = "Your FairWhere sign-in code"
 content_path = "./supabase/templates/magic_link.html"
 
+# First-time email sign-ups get this one instead; it needs the code too.
+[auth.email.template.confirmation]
+subject = "Your FairWhere sign-in code"
+content_path = "./supabase/templates/confirmation.html"
+
 # Pinned to the hosted project's values so `supabase config push` only changes what we mean to.
 [auth.mfa.totp]
 enroll_enabled = true
