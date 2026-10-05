@@ -314,6 +314,22 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 @keyframes banner-in { from { transform: translateY(-120%); } }
 .watchers .note b { color: var(--ink); }
 
+.segmented.mini { padding: 3px; border-radius: 99px; }
+.segmented.mini button { padding: 4px 14px; font-size: 13px; border-radius: 99px; }
+.qr { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.qr img, .qr-wait { width: 200px; height: 200px; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.qr .note { text-align: center; }
+
+.course-search { position: relative; }
+.course-options { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 4px; list-style: none; max-height: 300px; overflow-y: auto;
+  background: #fff; border-radius: 14px; box-shadow: 0 12px 30px rgba(16, 24, 18, .2); }
+.course-options button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 10px 12px; border-radius: 10px;
+  cursor: pointer; color: var(--ink); }
+.course-options button:hover, .course-options [aria-selected="true"] button { background: var(--accent-soft); }
+.course-options .row-main b { font-size: 16px; }
+.course-dist { flex: none; }
+.course-none { padding: 12px; }
+
 /* ------------------------------------------------------------- everyday location sharing */
 .locshare { gap: 10px; }
 .locshare-form { display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; background: #f3f5f1; }

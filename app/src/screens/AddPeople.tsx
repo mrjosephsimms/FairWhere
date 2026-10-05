@@ -1,9 +1,10 @@
 // "Add people" (the + on People): your @username / code to share, add someone by
 // @username or code, answer requests, manage who you're connected with.
 import { useEffect, useState, type FormEvent } from "react";
+import QRCode from "qrcode";
 import { removeFriendship, requestFriend, respondFriend, type Friendship } from "../lib/db";
 import { useAction, type LiveData } from "../lib/hooks";
-import { shareInvite } from "../lib/native";
+import { addLink, shareInvite, shareProfile } from "../lib/native";
 import { Avatar } from "../components/Avatar";
 
 export function AddPeople({ data, me, incomingCode, onCodeUsed }: {
@@ -68,17 +69,7 @@ export function AddPeople({ data, me, incomingCode, onCodeUsed }: {
         {err && <p className="note err" role="alert">{err}</p>}
       </form>
 
-      <section className="card share">
-        <span className="label">Share yours</span>
-        <div className="share-ids">
-          {profile?.username && <b>@{profile.username}</b>}
-          <span className="code">{profile?.friend_code ?? "······"}</span>
-        </div>
-        <button className="btn" disabled={!profile}
-          onClick={async () => setMsg((await shareInvite(profile!.friend_code, profile!.display_name)) === "copied" ? "Invite copied." : null)}>
-          Invite someone
-        </button>
-      </section>
+      {profile && <ShareYours code={profile.friend_code} name={profile.display_name} username={profile.username} onMsg={setMsg} />}
 
       {incoming.length > 0 && (
         <section className="card">
@@ -122,3 +113,44 @@ export function AddPeople({ data, me, incomingCode, onCodeUsed }: {
     </div>
   );
 }
+
+/** Your code or a QR code (any phone camera opens it), plus share-by-text buttons. */
+function ShareYours({ code, name, username, onMsg }: { code: string; name: string; username: string | null; onMsg: (m: string | null) => void }) {
+  const [view, setView] = useState<"code" | "qr">("code");
+  const [qr, setQr] = useState<string | null>(null);
+  const link = addLink(code);
+  useEffect(() => {
+    if (view !== "qr") return;
+    QRCode.toDataURL(link, { width: 480, margin: 1, color: { dark: "#14321f", light: "#ffffff" } }).then(setQr).catch(() => setQr(null));
+  }, [view, link]);
+  const copied = (r: "shared" | "copied") => onMsg(r === "copied" ? "Copied. Paste it into a text." : null);
+
+  return (
+    <section className="card share">
+      <div className="row-between">
+        <span className="label">Share yours</span>
+        <div className="segmented mini" role="radiogroup" aria-label="Show code or QR">
+          <button role="radio" aria-checked={view === "code"} onClick={() => setView("code")}>Code</button>
+          <button role="radio" aria-checked={view === "qr"} onClick={() => setView("qr")}>QR</button>
+        </div>
+      </div>
+      {view === "code" ? (
+        <div className="share-ids">
+          {username && <b>@{username}</b>}
+          <span className="code">{code}</span>
+        </div>
+      ) : (
+        <div className="qr">
+          {qr ? <img src={qr} alt={`QR code to add ${name}`} width={200} height={200} /> : <div className="qr-wait" />}
+          <span className="note">Scan with any phone camera to add {username ? `@${username}` : "you"}.</span>
+        </div>
+      )}
+      <div className="actions">
+        <button className="btn" onClick={async () => copied(await shareInvite(code, name))}>Send invite</button>
+        <button className="btn ghost" onClick={async () => copied(await shareProfile(code, name, username))}>Share profile</button>
+      </div>
+      <span className="note">Invite: your code and a sign-up link. Profile: your name and @username.</span>
+    </section>
+  );
+}
+

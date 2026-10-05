@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { supabaseConfigured } from "./lib/supabase";
-import { initDeepLinks } from "./lib/native";
+import { initDeepLinks, takePendingAdd } from "./lib/native";
 import { useAction, useLiveData, useNow, useSession } from "./lib/hooks";
 import { endRound } from "./lib/db";
 import { roundInfo, visibleRounds } from "./lib/roundInfo";
@@ -32,6 +32,13 @@ export default function App() {
   const clearInvite = useCallback(() => setInvite(null), []);
 
   useEffect(() => initDeepLinks(setInvite), []);
+  // An add-me link opened before signing in: pick it up once they're in.
+  useEffect(() => {
+    if (session) {
+      const code = takePendingAdd();
+      if (code) setInvite(code);
+    }
+  }, [session]);
 
   if (Demo && new URLSearchParams(location.search).get("demo") === "game")
     return <Suspense fallback={<div className="hg-loading">Loading the course…</div>}><Demo /></Suspense>;

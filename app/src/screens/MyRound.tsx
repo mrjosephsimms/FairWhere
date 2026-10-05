@@ -7,6 +7,7 @@ import { DEFAULT_TARGET, type Mode } from "../lib/pace";
 import { ModeIcon } from "../components/ModeIcon";
 import { toYards } from "../lib/onCourse";
 import { AWAY_FROM_COURSE_M, metresFromCourse } from "../lib/leaveCourse";
+import { CourseSearch } from "../components/CourseSearch";
 import type { LatLng } from "../lib/courses";
 import type { GpsState } from "../lib/tracker";
 import { fmtDur } from "../lib/time";
@@ -64,6 +65,20 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
       .catch((e) => setLoadErr(e.message));
   }, []);
 
+  // If the phone has already allowed location, sort courses nearest-first and
+  // preselect the one they're standing on. (Never prompts just for this.)
+  const [here, setHere] = useState<LatLng | null>(null);
+  useEffect(() => {
+    navigator.permissions?.query({ name: "geolocation" as PermissionName })
+      .then((p) => (p.state === "granted" ? currentPosition().then(setHere) : null))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!here || !courses?.length) return;
+    const nearest = courses.reduce((a, b) => (metresFromCourse(b, here) < metresFromCourse(a, here) ? b : a));
+    if (metresFromCourse(nearest, here) < AWAY_FROM_COURSE_M) setCourseId(nearest.id);
+  }, [here, courses]);
+
   const course = courses?.find((c) => c.id === courseId);
   useEffect(() => {
     if (course?.nines) {
@@ -120,11 +135,7 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
     <form className="card" onSubmit={submit}>
       <label className="f">
         Course
-        <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}{c.nines ? ` (${c.nines.length * 9} holes)` : ""}</option>
-          ))}
-        </select>
+        <CourseSearch courses={courses} value={courseId} onChange={setCourseId} here={here} />
       </label>
       {course?.nines && (
         <div className="two">
