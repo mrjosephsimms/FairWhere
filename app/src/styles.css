@@ -234,7 +234,7 @@ h1 span { color: var(--flag); }
 .pill.bad { color: var(--bad); background: #fde4e4; } .pill.idle { color: var(--muted); }
 
 .nine { display: flex; flex-direction: column; gap: 8px; }
-.nine-switch { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 99px; background: #eef0ec; }
+.nine-switch { display: inline-flex; align-self: center; gap: 2px; padding: 3px; border-radius: 99px; background: #eef0ec; }
 .nine-switch button { position: relative; border: 0; background: none; border-radius: 99px; padding: 4px 12px; font-size: 12px; font-weight: 700;
   letter-spacing: .02em; color: var(--muted); cursor: pointer; }
 .nine-switch button[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(16, 24, 18, .12); }
