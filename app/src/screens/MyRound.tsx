@@ -261,7 +261,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
         </div>
       )}
       {gps.searchingSince && <p className="hunt">🔎 Ball hunt? {fmtDur(now - gps.searchingSince)} in this spot. Your friends can see it.</p>}
-      <p className="note">Finish around <b>{fmtTime(est.eta)}</b></p>
+      <p className="note finish">Finish around <b>{fmtTime(est.eta)}</b></p>
       <div className="stepper">
         <button className="btn ghost" aria-label="Back one hole" disabled={busy || round.hole <= 1} onClick={() => go(round.hole - 1)}>−</button>
         {round.hole < 18 ? (
