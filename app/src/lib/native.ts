@@ -85,12 +85,11 @@ export function initDeepLinks(onInvite: (code: string) => void): void {
 }
 
 /**
- * Open the phone's share sheet (text, WhatsApp, AirDrop...). Browsers only offer it on
- * secure (https) pages, so without it: copy if we can and open Messages pre-filled
- * (iOS/Android), else just copy. Says what actually happened.
+ * Open the phone's share sheet (AirDrop, Messages, Mail, WhatsApp...). Browsers only
+ * offer it on secure (https) pages; when it isn't available this returns "menu" and
+ * the caller shows our own share menu (shareTargets) instead.
  */
-export async function shareText(text: string, url?: string): Promise<"shared" | "copied" | "texted" | "failed"> {
-  const full = url ? `${text} ${url}` : text;
+export async function shareText(text: string, url?: string): Promise<"shared" | "menu"> {
   if (isNative || navigator.share) {
     try {
       if (isNative) await Share.share({ title: "FairWhere", text, url });
@@ -100,12 +99,23 @@ export async function shareText(text: string, url?: string): Promise<"shared" | 
       if ((e as Error)?.name === "AbortError") return "shared"; // they closed the sheet
     }
   }
-  const copied = await copyText(full);
-  if (/iPhone|iPad|Android/i.test(navigator.userAgent)) {
-    window.location.href = `sms:${/Android/i.test(navigator.userAgent) ? "?" : "&"}body=${encodeURIComponent(full)}`;
-    return "texted";
-  }
-  return copied ? "copied" : "failed";
+  return "menu";
+}
+
+/** The usual places to send something, for when the system share sheet isn't available. */
+export function shareTargets(text: string, url?: string) {
+  const full = url ? `${text} ${url}` : text, enc = encodeURIComponent(full);
+  const android = /Android/i.test(navigator.userAgent);
+  return [
+    { id: "sms", label: "Messages", href: `sms:${android ? "?" : "&"}body=${enc}` },
+    { id: "whatsapp", label: "WhatsApp", href: `https://wa.me/?text=${enc}` },
+    { id: "mail", label: "Mail", href: `mailto:?subject=${encodeURIComponent("Join me on FairWhere")}&body=${enc}` },
+  ];
+}
+
+/** Copy, working on plain-http pages too. */
+export async function copyToClipboard(text: string) {
+  return copyText(text);
 }
 
 /** Clipboard API where allowed (https), else the old select-and-copy trick (works on http too). */
@@ -134,14 +144,14 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 /** Invite someone new: your code plus a link that signs them up and adds you. */
-export function shareInvite(code: string, name: string) {
-  return shareText(`Join me on FairWhere${name ? ` (${name})` : ""} so you can see which hole I'm on. Sign up and add me with code ${code}:`, addLink(code));
-}
+export const inviteMessage = (code: string, name: string): [string, string] =>
+  [`Join me on FairWhere${name ? ` (${name})` : ""} so you can see which hole I'm on. Sign up and add me with code ${code}:`, addLink(code)];
+export const shareInvite = (code: string, name: string) => shareText(...inviteMessage(code, name));
 
 /** Share your profile: your @username and the same add-me link. */
-export function shareProfile(code: string, name: string, username: string | null) {
-  return shareText(`Find me on FairWhere: ${name}${username ? ` (@${username})` : ""}.`, addLink(username ? `@${username}` : code));
-}
+export const profileMessage = (code: string, name: string, username: string | null): [string, string] =>
+  [`Find me on FairWhere: ${name}${username ? ` (@${username})` : ""}.`, addLink(username ? `@${username}` : code)];
+export const shareProfile = (code: string, name: string, username: string | null) => shareText(...profileMessage(code, name, username));
 
 /** Fire when the app comes back to the foreground (refetch stale lists). */
 export function onResume(fn: () => void): () => void {

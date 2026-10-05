@@ -330,6 +330,14 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .course-dist { flex: none; }
 .course-none { padding: 12px; }
 
+.share-menu { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px; border-radius: 16px; background: #f3f5f1; }
+.share-target { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 0; background: none; padding: 6px 2px; cursor: pointer;
+  font: 600 12px var(--body); color: var(--ink); text-decoration: none; }
+.share-icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; background: #fff; box-shadow: 0 1px 4px rgba(16, 24, 18, .12); }
+.share-target.sms .share-icon { background: #34c759; }
+.share-target.whatsapp .share-icon { background: #25d366; }
+.share-target.mail .share-icon { background: #2f7cf6; }
+
 /* ------------------------------------------------------------- everyday location sharing */
 .locshare { gap: 10px; }
 .locshare-form { display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; background: #f3f5f1; }

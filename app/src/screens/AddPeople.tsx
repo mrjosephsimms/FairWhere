@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import QRCode from "qrcode";
 import { removeFriendship, requestFriend, respondFriend, type Friendship } from "../lib/db";
 import { useAction, type LiveData } from "../lib/hooks";
-import { addLink, shareInvite, shareProfile } from "../lib/native";
+import { addLink, copyToClipboard, inviteMessage, profileMessage, shareInvite, shareProfile, shareTargets } from "../lib/native";
 import { Avatar } from "../components/Avatar";
 
 export function AddPeople({ data, me, incomingCode, onCodeUsed }: {
@@ -123,8 +123,9 @@ function ShareYours({ code, name, username, onMsg }: { code: string; name: strin
     if (view !== "qr") return;
     QRCode.toDataURL(link, { width: 480, margin: 1, color: { dark: "#14321f", light: "#ffffff" } }).then(setQr).catch(() => setQr(null));
   }, [view, link]);
-  const copied = (r: Awaited<ReturnType<typeof shareInvite>>) =>
-    onMsg(r === "copied" ? "Copied. Paste it into a text." : r === "failed" ? `Couldn't open sharing here. Send them this: ${link}` : null);
+  // When the phone's own share sheet isn't available (plain-http pages), show our menu.
+  const [menu, setMenu] = useState<{ text: string; url: string } | null>(null);
+  const open = (r: "shared" | "menu", text: string, url: string) => (r === "menu" ? setMenu({ text, url }) : setMenu(null));
 
   return (
     <section className="card share">
@@ -147,9 +148,27 @@ function ShareYours({ code, name, username, onMsg }: { code: string; name: strin
         </div>
       )}
       <div className="actions">
-        <button className="btn" onClick={async () => copied(await shareInvite(code, name))}>Send invite</button>
-        <button className="btn ghost" onClick={async () => copied(await shareProfile(code, name, username))}>Share profile</button>
+        <button className="btn" onClick={async () => open(await shareInvite(code, name), ...inviteMessage(code, name))}>Send invite</button>
+        <button className="btn ghost" onClick={async () => open(await shareProfile(code, name, username), ...profileMessage(code, name, username))}>Share profile</button>
       </div>
+      {menu && (
+        <div className="share-menu" role="menu" aria-label="Share via">
+          {shareTargets(menu.text, menu.url).map((t) => (
+            <a key={t.id} role="menuitem" className={`share-target ${t.id}`} href={t.href} target={t.id === "whatsapp" ? "_blank" : undefined} rel="noreferrer"
+              onClick={() => setMenu(null)}>
+              <span className="share-icon" aria-hidden>{t.id === "sms" ? "💬" : t.id === "whatsapp" ? "🟢" : "✉️"}</span>
+              {t.label}
+            </a>
+          ))}
+          <button role="menuitem" className="share-target" onClick={async () => {
+            const ok = await copyToClipboard(`${menu.text} ${menu.url}`);
+            setMenu(null);
+            onMsg(ok ? "Copied. Paste it anywhere." : `Copy this link: ${menu.url}`);
+          }}>
+            <span className="share-icon" aria-hidden>📋</span>Copy
+          </button>
+        </div>
+      )}
       <span className="note">Invite: your code and a sign-up link. Profile: your name and @username.</span>
     </section>
   );
