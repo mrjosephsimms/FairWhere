@@ -40,6 +40,12 @@ export function alongLine(pts: LatLng[], f: number): LatLng {
   return pts[pts.length - 1];
 }
 
+/** Compass bearing (degrees clockwise from north) from a to b. */
+export function bearingDeg(a: LatLng, b: LatLng): number {
+  const k = Math.cos((a[0] * Math.PI) / 180);
+  return ((Math.atan2((b[1] - a[1]) * k, b[0] - a[0]) * 180) / Math.PI + 360) % 360;
+}
+
 /** [[west, south], [east, north]] around the given holes, for fitting the map to them. */
 export function courseBounds(seq: PlayHole[]): [[number, number], [number, number]] {
   const pts = seq.flatMap((h) => h.centerline);

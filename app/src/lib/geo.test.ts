@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alongLine, courseBounds, FIX_FRESH_MS, roundPosition } from "./geo";
+import { alongLine, bearingDeg, courseBounds, FIX_FRESH_MS, roundPosition } from "./geo";
 import { playSequence } from "./courses";
 import { course } from "./fixtures";
 import type { Round } from "./db";
@@ -58,5 +58,14 @@ describe("courseBounds", () => {
       expect(lng).toBeGreaterThanOrEqual(w);
       expect(lng).toBeLessThanOrEqual(e);
     }
+  });
+});
+
+describe("bearingDeg", () => {
+  it("points the compass way", () => {
+    expect(bearingDeg([33.5, -117.1], [33.6, -117.1])).toBeCloseTo(0, 5);
+    expect(bearingDeg([33.5, -117.1], [33.5, -117.0])).toBeCloseTo(90, 5);
+    expect(bearingDeg([33.5, -117.1], [33.4, -117.1])).toBeCloseTo(180, 5);
+    expect(bearingDeg([33.5, -117.1], [33.5, -117.2])).toBeCloseTo(270, 5);
   });
 });

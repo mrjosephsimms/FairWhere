@@ -18,7 +18,9 @@ const SATELLITE: StyleSpecification = {
   sources: {
     sat: {
       type: "raster",
-      tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      // Esri's newer "Clarity" imagery: sharper, and it lines up with OpenStreetMap's greens
+      // (the older World_Imagery was ~7 m off at Redhawk, so flags looked off the green).
+      tiles: ["https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
       tileSize: 256,
       maxzoom: 19,
       attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
@@ -53,7 +55,18 @@ export interface MapFocus {
   bounds?: [[number, number], [number, number]];
   center?: [number, number];
   zoom?: number;
+  /** Tee-to-green direction when framing one hole: Tee view turns the map to it. */
+  bearing?: number;
+  /** [tee, green] of that hole, for framing it in Tee view. */
+  line?: [LatLng, LatLng];
 }
+
+/** Tee view tilt, and how much closer it can zoom (the far end of a tilted map shrinks). */
+const TILT = 55, TILT_ZOOM = 0.6, TILT_AIM = 0.3;
+
+/** North up (a plain map) or Tee view (turned and tilted down the hole, like standing on the tee). */
+export type MapAngle = "north" | "tee";
+const ANGLE_KEY = "fairwhere.mapAngle";
 
 const TOOLS_KEY = "fairwhere.mapTools";
 function loadTools(): MapTools {
@@ -185,6 +198,20 @@ export function MapView({ pins = [], course, tools, focus, bottomPad = 0, onPin,
     for (const [id, mk] of markers.current) if (!seen.has(id)) (mk.remove(), markers.current.delete(id));
   }, [pins]);
 
+  const [angle, setAngle] = useState<MapAngle>(() => {
+    try {
+      return localStorage.getItem(ANGLE_KEY) === "tee" ? "tee" : "north";
+    } catch {
+      return "north";
+    }
+  });
+  const flipAngle = () => {
+    const next = angle === "tee" ? "north" : "tee";
+    setAngle(next);
+    try {
+      localStorage.setItem(ANGLE_KEY, next);
+    } catch { /* not remembered */ }
+  };
   const focusRef = useRef(focus);
   focusRef.current = focus;
   useEffect(() => {
@@ -198,15 +225,39 @@ export function MapView({ pins = [], course, tools, focus, bottomPad = 0, onPin,
     // Always fitBounds: flyTo({padding}) would store the padding on the map and every later
     // fit adds its own on top. A single point is a zero-size box capped at `zoom`.
     const bounds = f.bounds ?? (f.center && [f.center, f.center]);
-    if (bounds) m.fitBounds(bounds, { padding, maxZoom: f.zoom ?? 16.5, duration: 700 });
+    // Tee view: hole runs up the screen and the map tilts back, as if looking down it from the tee.
+    // Framed by the hole's own length (a north-aligned box around a diagonal hole is far too loose).
+    if (angle === "tee" && f.bearing != null && f.line) {
+      const [a, b] = f.line, midLat = (a[0] + b[0]) / 2;
+      const lenM = Math.hypot((b[0] - a[0]) * 111320, (b[1] - a[1]) * 111320 * Math.cos((midLat * Math.PI) / 180));
+      const visH = h - top - bottom, visW = w - 2 * side;
+      const mpp = Math.max((lenM * 1.15) / visH, 70 / visW); // whole hole tall, ~70 m of fairway wide
+      const zoom = Math.min(f.zoom ?? 18, Math.log2((156543.03 * Math.cos((midLat * Math.PI) / 180)) / mpp) + TILT_ZOOM);
+      // Tilted, the near half of the screen covers far less ground than the far half, so aim
+      // the centre ~30% of the way from the tee rather than halfway.
+      const c: [number, number] = [a[1] + (b[1] - a[1]) * TILT_AIM, a[0] + (b[0] - a[0]) * TILT_AIM];
+      m.easeTo({ center: c, zoom, bearing: f.bearing, pitch: TILT, offset: [0, (top - bottom) / 2], duration: 900 });
+    } else if (bounds) m.fitBounds(bounds, { padding, maxZoom: f.zoom ?? 16.5, duration: 900, bearing: 0, pitch: 0 });
     // bottomPad is read at focus time only; the camera shouldn't chase the sheet mid-drag.
-  }, [focus?.key]);
+  }, [focus?.key, angle]);
 
   return (
     <>
       <div ref={el} className="map-bg" />
       {interactive && (
         <div className="map-controls">
+          {focus?.bearing != null && (
+            <button aria-label={angle === "tee" ? "Tee view (tap for north up)" : "North up (tap for tee view)"} aria-pressed={angle === "tee"}
+              onClick={flipAngle}>
+              {angle === "tee" ? (
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
+                  <path d="M12 3 4.5 21h15L12 3z" /><path d="M12 8v6" /><path d="M9.5 18h5" />
+                </svg>
+              ) : (
+                <span className="map-north" aria-hidden>N</span>
+              )}
+            </button>
+          )}
           {tools && (
             <button aria-label="Map tools" aria-expanded={panel} aria-pressed={panel} onClick={() => setPanel(!panel)}>
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">

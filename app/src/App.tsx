@@ -4,7 +4,7 @@ import { initDeepLinks, takePendingAdd } from "./lib/native";
 import { useAction, useLiveData, useNow, useSession } from "./lib/hooks";
 import { endRound } from "./lib/db";
 import { roundInfo, visibleRounds } from "./lib/roundInfo";
-import { courseBounds, roundPosition } from "./lib/geo";
+import { bearingDeg, courseBounds, roundPosition } from "./lib/geo";
 import { playSequence } from "./lib/courses";
 import { useRoundTracker } from "./lib/tracker";
 import { usePresenceSharing } from "./lib/presence";
@@ -171,7 +171,9 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     // Live: frame the hole they're on (and fly to the next one when it changes). Otherwise the whole course.
     if (course) {
       const on = course.seq.find((h) => h.n === course.current); // by number: a game overlay holds just one hole
-      return on ? { key: `${key}|h${on.n}`, bounds: courseBounds([on]), zoom: 18 } : { key, bounds: courseBounds(course.seq) };
+      if (!on) return { key, bounds: courseBounds(course.seq) };
+      const green = on.green?.center ?? on.centerline[on.centerline.length - 1];
+      return { key: `${key}|h${on.n}`, bounds: courseBounds([on]), zoom: 18, bearing: bearingDeg(on.centerline[0], green), line: [on.centerline[0], green] };
     }
     const spot = person ? data.spots.find((s) => s.user_id === person) : undefined;
     if (spot) return { key: `${key}|spot-${person}`, center: [spot.lng, spot.lat], zoom: 15 };

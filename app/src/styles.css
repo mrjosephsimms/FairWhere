@@ -42,6 +42,7 @@ h1 span { color: var(--flag); }
 .map-controls { top: calc(12px + env(safe-area-inset-top)); display: flex; flex-direction: column; }
 .map-controls button, .map-locate { width: 46px; height: 46px; border: 0; background: none; display: grid; place-items: center; color: var(--ink); cursor: pointer; }
 .map-controls button[aria-pressed="true"] { color: var(--accent); }
+.map-north { font: 700 17px var(--display); letter-spacing: .02em; }
 /* Hole tools: checklist next to the map buttons, yardage tags and the measuring target. */
 .map-tools {
   position: absolute; z-index: 4; top: calc(112px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
