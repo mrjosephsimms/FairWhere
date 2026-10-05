@@ -1,4 +1,4 @@
-// The "People" panel: everyone you're connected with, Find My style. Anyone out on the
+// The "Buddies" panel (People.tsx): everyone you're connected with, Find My style. Anyone out on the
 // course (or about to tee off) is at the top with a pulsing ring; everyone else is
 // greyed out, A to Z. Tap someone with a round to see it (and play their holes).
 import { useState } from "react";
@@ -109,9 +109,9 @@ export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPe
       {rest.length > 0 && <div className="rows">{rest.map((id) => row(id, false))}</div>}
       {!friendIds.length && (
         <div className="empty">
-          <b>No one here yet</b>
-          <span>Add the people you golf with (or wait for) to see which hole they're on.</span>
-          <button className="btn" onClick={onAddPeople}>Add people</button>
+          <b>No buddies yet</b>
+          <span>Add your golf buddies (or whoever you're waiting on) to see which hole they're on.</span>
+          <button className="btn" onClick={onAddPeople}>Add buddies</button>
         </div>
       )}
       {friendIds.length > 0 && !people.length && <p className="empty">No one matches “{query}”.</p>}

@@ -71,7 +71,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const [sheetPx, setSheetPx] = useState(0);
   const [recenter, setRecenter] = useState(0);
   const [game, setGame] = useState<number | null>(null); // hole being played on the selected round
-  const [adding, setAdding] = useState(false); // the "Add people" sheet (the + on People)
+  const [adding, setAdding] = useState(false); // the "Add buddies" sheet (the + on Buddies)
   const [search, setSearch] = useState<string | null>(null); // People search box (null = closed)
   const [person, setPerson] = useState<string | null>(null); // a friend's page when they aren't playing
   const [alertsFor, setAlertsFor] = useState<string | null>(null); // the bell: alert settings for this friend
@@ -211,10 +211,10 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     : person
     ? data.profiles.get(person)?.display_name || "Golfer"
     : adding
-    ? "Add people"
+    ? "Add buddies"
     : sel
     ? sel.user_id === me ? "Your round" : data.profiles.get(sel.user_id)?.display_name || "Golfer"
-    : tab === "people" ? "People" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Profile";
+    : tab === "people" ? "Buddies" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Profile";
 
   const header = (
     <div className="sheet-head">
@@ -224,7 +224,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         </button>
       )}
       {tab === "people" && !sel && !adding && !person && !inbox && search !== null ? (
-        <input className="search" autoFocus value={search} placeholder="Search name or @username" aria-label="Search people"
+        <input className="search" autoFocus value={search} placeholder="Search buddies or @username" aria-label="Search buddies"
           onChange={(e) => setSearch(e.target.value)} />
       ) : (
         <h2>{title}</h2>
@@ -240,14 +240,14 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
             <BellIcon />
             {unread > 0 && <i className="dot-badge">{unread}</i>}
           </button>
-          <button className="icon-btn" aria-label={search !== null ? "Close search" : "Search people"} onClick={() => setSearch(search !== null ? null : "")}>
+          <button className="icon-btn" aria-label={search !== null ? "Close search" : "Search buddies"} onClick={() => setSearch(search !== null ? null : "")}>
             {search !== null ? (
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M6 6l12 12M18 6 6 18" /></svg>
             ) : (
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
             )}
           </button>
-          <button className="icon-btn" aria-label="Add people" onClick={openAdding}>
+          <button className="icon-btn" aria-label="Add buddies" onClick={openAdding}>
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 5v14M5 12h14" /></svg>
           </button>
         </>
@@ -296,7 +296,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       </Sheet>
 
       <nav className="tabbar" role="tablist">
-        <TabButton id="people" tab={tab} go={go} label="People" badge={incoming}>
+        <TabButton id="people" tab={tab} go={go} label="Buddies" badge={incoming}>
           <path d="M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7.5 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 19.5C2 16 5 14 8.5 14s6.5 2 6.5 5.5V20H2v-.5zm14.5.5v-.5c0-1.9-.7-3.5-1.9-4.6.4-.1.9-.1 1.4-.1 3 0 6 1.7 6 4.7v.5h-5.5z" />
         </TabButton>
         <TabButton id="round" tab={tab} go={go} label={live ? `Hole ${live.hole}` : "Round"}>

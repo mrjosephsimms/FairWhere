@@ -1,4 +1,4 @@
-// "Add people" (the + on People): your @username / code to share, add someone by
+// "Add buddies" (the + on Buddies): your @username / code to share, add someone by
 // @username or code, answer requests, manage who you're connected with.
 import { useEffect, useState, type FormEvent } from "react";
 import QRCode from "qrcode";
@@ -87,8 +87,8 @@ export function AddPeople({ data, me, incomingCode, onCodeUsed }: {
       )}
 
       <section className="card">
-        <span className="label">Your people</span>
-        {accepted.length === 0 && outgoing.length === 0 && <p className="note">No one yet. Add someone above, or share yours.</p>}
+        <span className="label">Your buddies</span>
+        {accepted.length === 0 && outgoing.length === 0 && <p className="note">No buddies yet. Add someone above, or share yours.</p>}
         {accepted.map((f) => (
           <div key={other(f)}>
             {person(other(f), <button className="btn ghost small" onClick={() => setConfirmRemove(other(f))}>Remove</button>)}

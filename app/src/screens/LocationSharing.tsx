@@ -77,7 +77,7 @@ export function LocationSharing({ data, me }: { data: LiveData; me: string }) {
       ) : friends.length > 0 ? (
         <button className="btn ghost" onClick={() => setPicking(true)}>Share my location…</button>
       ) : mine.length === 0 ? (
-        <p className="note">Add people first to share your location with them.</p>
+        <p className="note">Add buddies first to share your location with them.</p>
       ) : null}
       {mine.length > 0 && !isNative && <p className="note">On the web, your location updates while the app is open.</p>}
 
