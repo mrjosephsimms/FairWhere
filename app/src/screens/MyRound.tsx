@@ -60,7 +60,9 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
     listCourses()
       .then((cs) => {
         setCourses(cs);
-        if (cs[0]) setCourseId(cs[0].id);
+        // Home course first (Edit profile), else the first one; standing at a course overrides below.
+        const home = data.profiles.get(me)?.home_course_id;
+        setCourseId(cs.find((c) => c.id === home)?.id ?? cs[0]?.id ?? "");
       })
       .catch((e) => setLoadErr(e.message));
   }, []);

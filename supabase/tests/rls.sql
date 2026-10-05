@@ -357,4 +357,14 @@ set session_replication_role = origin;
 select public.notify_tick();
 select pg_temp.ok(not exists (select 1 from public.rounds where user_id = '00000000-0000-0000-0000-00000000000a' and (status = 'live' or last_lat is not null)), 'left the course (2+ km away): round finished, location wiped');
 
+-- Home course (Edit profile).
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+update public.profiles set home_course_id = 'redhawk' where id = auth.uid();
+select pg_temp.ok((select home_course_id = 'redhawk' from public.profiles where id = auth.uid()), 'set my home course');
+select pg_temp.fails($$update public.profiles set home_course_id = 'not-a-course' where id = auth.uid()$$, 'home course must be a real course');
+update public.profiles set home_course_id = 'redhawk' where id = '00000000-0000-0000-0000-00000000000b';
+reset role;
+select pg_temp.ok((select home_course_id is null from public.profiles where id = '00000000-0000-0000-0000-00000000000b'), 'cannot set someone else''s home course');
+
 \warn 'All RLS tests passed.'

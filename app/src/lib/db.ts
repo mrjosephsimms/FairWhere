@@ -11,6 +11,8 @@ export interface Profile {
   /** Unique @handle (without the @); null until they pick one. */
   username: string | null;
   avatar_url: string | null;
+  /** The course they call home (set in Edit profile). */
+  home_course_id: string | null;
 }
 
 export interface Friendship {
@@ -52,7 +54,7 @@ function check<T>(res: { data: T | null; error: { message: string } | null }): T
 
 export async function getProfiles(ids: string[]): Promise<Profile[]> {
   if (!ids.length) return [];
-  return check(await supabase.from("profiles").select("id, display_name, friend_code, username, avatar_url").in("id", ids));
+  return check(await supabase.from("profiles").select("id, display_name, friend_code, username, avatar_url, home_course_id").in("id", ids));
 }
 
 export async function setDisplayName(id: string, name: string) {
@@ -68,6 +70,10 @@ export async function setUsername(id: string, username: string) {
   const res = await supabase.from("profiles").update({ username: u }).eq("id", id);
   if (res.error?.code === "23505") throw new Error(`@${u} is taken. Try another.`);
   check(res);
+}
+
+export async function setHomeCourse(id: string, courseId: string | null) {
+  check(await supabase.from("profiles").update({ home_course_id: courseId }).eq("id", id));
 }
 
 /** Upload a profile photo (already resized to a small JPEG) and point the profile at it. */

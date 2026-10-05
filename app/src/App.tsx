@@ -14,7 +14,7 @@ import { Sheet, type Detent } from "./components/Sheet";
 import { SignIn } from "./screens/SignIn";
 import { People, RoundDetail } from "./screens/People";
 import { MyRound } from "./screens/MyRound";
-import { Me } from "./screens/Me";
+import { EditProfile, Me } from "./screens/Me";
 import { AddPeople } from "./screens/AddPeople";
 import { AlertSettings, Inbox, NoteBanner, PersonCard } from "./screens/Alerts";
 
@@ -76,6 +76,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const [person, setPerson] = useState<string | null>(null); // a friend's page when they aren't playing
   const [alertsFor, setAlertsFor] = useState<string | null>(null); // the bell: alert settings for this friend
   const [inbox, setInbox] = useState(false); // your alerts list
+  const [editing, setEditing] = useState(false); // Edit profile
 
   const rounds = useMemo(() => visibleRounds(data.rounds, now), [data.rounds, now]);
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
@@ -180,6 +181,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     setPerson(null);
     setAlertsFor(null);
     setInbox(false);
+    setEditing(false);
   }
   function openRound(id: string) {
     closePages();
@@ -200,7 +202,9 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const pageOf = sel && sel.user_id !== me ? sel.user_id : person;
   const watching = (id: string | null) => !!id && data.watches.some((w) => w.watcher_id === me && w.golfer_id === id);
   const unread = data.notes.filter((n) => !n.read_at).length;
-  const title = alertsFor
+  const title = editing
+    ? "Edit profile"
+    : alertsFor
     ? `Alerts · ${data.profiles.get(alertsFor)?.display_name || "Golfer"}`
     : inbox
     ? "Notifications"
@@ -214,7 +218,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   const header = (
     <div className="sheet-head">
-      {(sel || adding || person || inbox || alertsFor) && (
+      {(sel || adding || person || inbox || alertsFor || editing) && (
         <button className="icon-btn" aria-label="Back" onClick={() => (alertsFor ? setAlertsFor(null) : closePages())}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="m15 6-6 6 6 6" /></svg>
         </button>
@@ -269,8 +273,10 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       <NoteBanner data={data} onOpen={(n) => (rounds.some((r) => r.id === n.round_id) ? openRound(n.round_id) : openInbox())} />
 
       <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header}
-        view={alertsFor ? `alerts-${alertsFor}` : inbox ? "inbox" : person ? `person-${person}` : adding ? "adding" : sel?.id ?? tab}>
-        {alertsFor ? (
+        view={editing ? "edit-profile" : alertsFor ? `alerts-${alertsFor}` : inbox ? "inbox" : person ? `person-${person}` : adding ? "adding" : sel?.id ?? tab}>
+        {editing ? (
+          <EditProfile data={data} me={me} />
+        ) : alertsFor ? (
           <AlertSettings data={data} me={me} golferId={alertsFor} />
         ) : inbox ? (
           <Inbox data={data} onOpen={(id) => rounds.some((r) => r.id === id) && openRound(id)} />
@@ -285,7 +291,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         ) : tab === "round" ? (
           <MyRound data={data} me={me} now={now} gps={gps} />
         ) : (
-          <Me data={data} me={me} now={now} />
+          <Me data={data} me={me} now={now} onEdit={() => (setEditing(true), setDetent("full"))} />
         )}
       </Sheet>
 

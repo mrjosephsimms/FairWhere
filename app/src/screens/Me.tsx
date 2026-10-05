@@ -2,7 +2,9 @@
 // (only here, only for you), and an expandable round history.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { playSequence, type CourseData } from "../lib/courses";
-import { getCourses, getMyHistory, setAvatar, setDisplayName, setUsername, USERNAME_RE, type GamePlay, type Round } from "../lib/db";
+import {
+  getCourses, getMyHistory, listCourses, setAvatar, setDisplayName, setHomeCourse, setUsername, USERNAME_RE, type GamePlay, type Round,
+} from "../lib/db";
 import { useAction, type LiveData } from "../lib/hooks";
 import { profileStats } from "../lib/stats";
 import { fmtToPar, summarize } from "../lib/score";
@@ -13,6 +15,7 @@ import { Avatar } from "../components/Avatar";
 import { HoleStrip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
 import { LocationSharing } from "./LocationSharing";
+import { CourseSearch } from "../components/CourseSearch";
 
 interface History {
   rounds: Round[];
@@ -21,7 +24,7 @@ interface History {
   courses: Map<string, CourseData>;
 }
 
-export function Me({ data, me, now }: { data: LiveData; me: string; now: number }) {
+export function Me({ data, me, now, onEdit }: { data: LiveData; me: string; now: number; onEdit: () => void }) {
   const [hist, setHist] = useState<History | null>(null);
   const [histErr, setHistErr] = useState<string | null>(null);
   // Refresh history when one of your rounds changes state (e.g. you just finished).
@@ -53,7 +56,7 @@ export function Me({ data, me, now }: { data: LiveData; me: string; now: number 
 
   return (
     <div className="list">
-      <ProfileCard data={data} me={me} />
+      <ProfileHeader data={data} me={me} onEdit={onEdit} />
       <LocationSharing data={data} me={me} />
 
       {histErr && <p className="note err">Couldn't load your stats: {histErr}</p>}
@@ -71,7 +74,9 @@ export function Me({ data, me, now }: { data: LiveData; me: string; now: number 
             <Stat label="Fastest round" value={stats.fastestMinutes != null ? fmtDur(stats.fastestMinutes * 60000) : "—"} />
             <Stat label="Hole game" value={`${stats.gameWins}/${stats.gamePlays}`} sub="wins / plays" />
           </div>
-          {stats.favoriteCourse && <p className="note">Home course: <b>{courseName(stats.favoriteCourse)}</b></p>}
+          {stats.favoriteCourse && stats.favoriteCourse !== data.profiles.get(me)?.home_course_id && (
+            <p className="note">Most played: <b>{courseName(stats.favoriteCourse)}</b></p>
+          )}
         </section>
       )}
 
@@ -93,14 +98,39 @@ function Stat({ label, value, sub }: { label: string; value: string | number; su
   );
 }
 
-/** Photo (tap to change), display name, and the unique @username. */
-function ProfileCard({ data, me }: { data: LiveData; me: string }) {
+/** The top of your profile: who you are at a glance, and the way into Edit profile. */
+function ProfileHeader({ data, me, onEdit }: { data: LiveData; me: string; onEdit: () => void }) {
+  const p = data.profiles.get(me);
+  const [home, setHome] = useState<string | null>(null);
+  useEffect(() => {
+    if (!p?.home_course_id) return setHome(null);
+    getCourses([p.home_course_id]).then((m) => setHome(m.get(p.home_course_id!)?.name ?? null)).catch(() => {});
+  }, [p?.home_course_id]);
+  return (
+    <section className="card profile">
+      <Avatar id={me} name={p?.display_name || "Me"} photo={p?.avatar_url} size={88} />
+      <div className="person-head">
+        <b>{p?.display_name || "Your name"}</b>
+        <span className="sub">{p?.username ? `@${p.username}` : "No @username yet"}</span>
+        <span className="sub">⛳ {home ? `Home course: ${home}` : "No home course yet"}</span>
+      </div>
+      <button className="btn ghost small" onClick={onEdit}>Edit profile</button>
+    </section>
+  );
+}
+
+/** Edit profile: photo (tap to change), name, the unique @username, and your home course. */
+export function EditProfile({ data, me }: { data: LiveData; me: string }) {
   const profile = data.profiles.get(me);
   const { busy, err, run } = useAction(data.reload);
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [uploading, setUploading] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const [courses, setCourses] = useState<CourseData[] | null>(null);
+  useEffect(() => {
+    listCourses().then(setCourses).catch(() => setCourses([]));
+  }, []);
   useEffect(() => setName(profile?.display_name ?? ""), [profile?.display_name]);
   useEffect(() => setHandle(profile?.username ?? ""), [profile?.username]);
 
@@ -143,6 +173,18 @@ function ProfileCard({ data, me }: { data: LiveData; me: string }) {
           </div>
           {handle && !handleOk && <span className="note">3–20 characters: letters, numbers, _ or .</span>}
         </label>
+        <div className="f">
+          Home course
+          {courses ? (
+            <CourseSearch courses={courses} value={profile?.home_course_id ?? ""} here={null}
+              onChange={(id) => run(() => setHomeCourse(me, id))} />
+          ) : (
+            <span className="note">Loading courses…</span>
+          )}
+          {profile?.home_course_id && (
+            <button type="button" className="link" onClick={() => run(() => setHomeCourse(me, null))}>Clear home course</button>
+          )}
+        </div>
       </div>
       {err && <p className="note err" role="alert">{err}</p>}
     </section>
