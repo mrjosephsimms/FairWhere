@@ -74,7 +74,7 @@ export function SignIn() {
 
   return (
     <div className="card signin">
-      <h1>Fair<span>Where</span></h1>
+      <h1>Fair<span>Where?</span></h1>
       <button className="btn dark" disabled={busy} onClick={() => run(() => signInWithProvider("apple"))}>
         Continue with Apple
       </button>

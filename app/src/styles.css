@@ -434,7 +434,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
   position: relative; z-index: 2; width: min(460px, calc(100% - 24px)); margin-bottom: calc(12px + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, .94); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: var(--shadow); border-radius: 26px; padding: 22px;
 }
-.signin h1 { margin-bottom: 6px; text-align: center; text-transform: none; font-size: 34px; }
+.signin h1 { margin-bottom: 6px; text-align: center; }
 
 /* ------------------------------------------------------------- passwords */
 .pw-input { display: flex; align-items: center; gap: 6px; }
