@@ -43,6 +43,18 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   plus a Google OAuth client. Email sign-in works without them.
 - Open product questions from `docs/handoff/HANDOFF.md` §8 (spectator links, showing scores).
 
+## Phone sign-in (text a code) — built, switched off
+
+The sign-in screen shows an Email | Phone toggle by itself once the Supabase project has
+phone login on (it reads `/auth/v1/settings`). To turn it on:
+1. Make a Twilio account, create a **Verify** service (or buy a number for plain Twilio SMS).
+2. Supabase dashboard -> Auth -> Sign In / Providers -> Phone: enable, pick Twilio Verify,
+   paste Account SID / Auth Token / Verify Service SID. Add test phone numbers + fixed codes
+   there for App Review / dev (keep them OUT of config.toml — this repo is public).
+3. Pin `[auth.sms] enable_signup = true` and `[auth.sms.twilio_verify] enabled = true`
+   (secret via `env(...)`) in `supabase/config.toml` BEFORE the next `supabase config push`,
+   or the push turns phone login back off.
+
 ## Location (2026-10-04)
 - Built: everyday location sharing (off by default, owner grants per person with an expiry), "not at a golf
   course" check on Start a Round, auto-finish when the golfer leaves the course (client 10 min / 3 km rule +

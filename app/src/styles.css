@@ -252,7 +252,6 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .note { font-size: 14px; color: var(--muted); margin: 0; }
 .note.err { color: var(--bad); }
 .note.center { text-align: center; font-size: 12px; color: var(--faint); }
-.lede { margin: 0 0 4px; font-size: 17px; }
 .or { text-align: center; color: var(--faint); font-size: 13px; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .actions .btn { flex: 1 1 140px; }
@@ -435,4 +434,4 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
   position: relative; z-index: 2; width: min(460px, calc(100% - 24px)); margin-bottom: calc(12px + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, .94); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: var(--shadow); border-radius: 26px; padding: 22px;
 }
-.signin h1 { margin-bottom: 2px; }
+.signin h1 { margin-bottom: 6px; text-align: center; }
