@@ -104,16 +104,6 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 
   return (
     <form className="card" onSubmit={submit}>
-      <div className="segmented" role="radiogroup" aria-label="Walking or riding">
-        {MODES.map(([m, label]) => (
-          <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => {
-            setModeState(m);
-            if (!paceTouched) setTarget(DEFAULT_TARGET[m]); // follow the mode until they pick a pace
-          }}>
-            <ModeIcon mode={m} /> {label}
-          </button>
-        ))}
-      </div>
       <label className="f">
         Course
         <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
@@ -150,6 +140,16 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
             {PACES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
+      </div>
+      <div className="segmented" role="radiogroup" aria-label="Walking or riding">
+        {MODES.map(([m, label]) => (
+          <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => {
+            setModeState(m);
+            if (!paceTouched) setTarget(DEFAULT_TARGET[m]); // follow the mode until they pick a pace
+          }}>
+            <ModeIcon mode={m} /> {label}
+          </button>
+        ))}
       </div>
       <fieldset className="f">
         <legend>Who can see it</legend>
