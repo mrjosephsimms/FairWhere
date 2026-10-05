@@ -136,7 +136,7 @@ export function RoundDetail({ round, data, me, now, onPlay }: { round: Round; da
       <p className="sub mode-line"><ModeIcon mode={round.mode} size={16} /> {label}</p>
       <div className="stats">
         <div className="stat">
-          <span className="label">{est.phase === "pre" ? "Tee time" : est.phase === "done" ? "Last hole" : "On hole"}</span>
+          <span className="label">{est.phase === "pre" ? "Tee time" : est.phase === "done" ? "Last hole" : "Hole"}</span>
           {est.phase === "pre" ? <b>{fmtTime(Date.parse(round.tee_time))}</b> : <b>{round.hole}<small>/18</small></b>}
           {est.phase === "live" && (
             <span className="sub">{toGreen != null ? `~${toGreen} yds to the green` : `Par ${hole.par}${hole.yards ? ` · ${hole.yards} yds` : ""}`}</span>

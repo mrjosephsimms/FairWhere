@@ -24,6 +24,7 @@ type Tab = "people" | "round" | "me";
 const HoleGame = lazy(() => import("./game3d/HoleGame"));
 // Dev-only playground (?demo=game&hole=N); import.meta.env.DEV strips it from builds.
 const Demo = import.meta.env.DEV ? lazy(() => import("./game3d/Demo")) : null;
+const MapDemo = import.meta.env.DEV ? lazy(() => import("./components/MapDemo")) : null; // ?demo=map&hole=N&at=0.4
 
 export default function App() {
   const session = useSession();
@@ -42,6 +43,8 @@ export default function App() {
 
   if (Demo && new URLSearchParams(location.search).get("demo") === "game")
     return <Suspense fallback={<div className="hg-loading">Loading the course…</div>}><Demo /></Suspense>;
+  if (MapDemo && new URLSearchParams(location.search).get("demo") === "map")
+    return <Suspense fallback={null}><MapDemo /></Suspense>;
 
   if (!supabaseConfigured)
     return (
@@ -156,6 +159,13 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     return info ? { seq: info.seq, current: focusRound!.status === "live" ? focusRound!.hole : 0, finished: focusRound!.status !== "live" } : null;
   }, [focusRound, data.courses, now]);
 
+  // Hole tools (yardage, measure...) for whoever's round is on the map; GPS only for your own.
+  const toolHole = course && !course.finished ? course.seq.find((h) => h.n === course.current) : undefined;
+  const tools = useMemo(
+    () => (toolHole && focusRound ? { hole: toolHole, courseId: focusRound.course_id, gps: focusRound.id === live?.id ? gps.fix?.pt ?? null : null } : null),
+    [toolHole?.ref, toolHole?.n, focusRound?.course_id, focusRound?.id, live?.id, gps.fix?.pt[0], gps.fix?.pt[1]],
+  );
+
   const focus: MapFocus = (() => {
     const key = `${tab}|${focusRound?.id ?? ""}|${data.loaded}|${pins.length > 0}|${course ? 1 : 0}|${recenter}`;
     // Live: frame the hole they're on (and fly to the next one when it changes). Otherwise the whole course.
@@ -216,6 +226,9 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     ? sel.user_id === me ? "Your round" : data.profiles.get(sel.user_id)?.display_name || "Golfer"
     : tab === "people" ? "Buddies" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Profile";
 
+  // On My Round the "sharing live" indicator sits in the sheet header, leaving the top of the map clear.
+  const pillInSheet = Boolean(live) && tab === "round" && !sel && !adding && !person && !inbox && !alertsFor && !editing;
+
   const header = (
     <div className="sheet-head">
       {(sel || adding || person || inbox || alertsFor || editing) && (
@@ -229,6 +242,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       ) : (
         <h2>{title}</h2>
       )}
+      {pillInSheet && live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} inSheet />}
       {pageOf && !alertsFor && (
         <button className={`icon-btn${watching(pageOf) ? " on" : ""}`} aria-label="Alerts for this person" onClick={() => (setAlertsFor(pageOf), setDetent("full"))}>
           <BellIcon filled={watching(pageOf)} />
@@ -257,12 +271,12 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   return (
     <div className="app">
-      <MapView pins={[...pins, ...spotPins]} course={course} focus={focus} bottomPad={sheetPx}
+      <MapView pins={[...pins, ...spotPins]} course={course} tools={tools} focus={focus} bottomPad={sheetPx}
         onPin={(id) => (id.startsWith("spot-") ? openPerson(id.slice(5)) : openRound(id))} />
       <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20.5 3.5 3.8 10.6c-.9.4-.8 1.7.2 1.9l6.6 1.2 1.3 6.6c.2 1 1.5 1.1 1.9.2L20.5 3.5z" /></svg>
       </button>
-      {live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
+      {live && !pillInSheet && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
       {!live && sharingWith.length > 0 && (
         <button className="loc-pill" onClick={() => go("me")}>
           📍 Sharing location with {sharingWith.length === 1 ? data.profiles.get(sharingWith[0].viewer_id)?.display_name || "1 person" : `${sharingWith.length} people`}
@@ -343,13 +357,13 @@ function TabButton({ id, tab, go, label, badge, children }: {
 }
 
 /** Always visible while sharing (HANDOFF §6), with a one-tap Stop. */
-function SharingPill({ roundId, hole, reload }: { roundId: string; hole: number; reload: () => void }) {
+function SharingPill({ roundId, hole, reload, inSheet }: { roundId: string; hole: number; reload: () => void; inSheet?: boolean }) {
   const [confirm, setConfirm] = useState(false);
   const { busy, err, run } = useAction(reload);
   return (
-    <div className="sharing" role="status">
+    <div className={`sharing${inSheet ? " in-sheet" : ""}`} role="status">
       <div className="sharing-row">
-        <span><i className="dot" aria-hidden /> Sharing live · Hole {hole}</span>
+        <span><i className="dot" aria-hidden /> {inSheet ? "Sharing live" : `Sharing live · Hole ${hole}`}</span>
         <button className="btn small" onClick={() => setConfirm(!confirm)}>Stop</button>
       </div>
       {confirm && <StopConfirm busy={busy} onYes={() => run(() => endRound(roundId, "cancelled"))} onNo={() => setConfirm(false)} />}

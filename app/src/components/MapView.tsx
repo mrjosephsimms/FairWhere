@@ -4,7 +4,10 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type ExpressionSpecification, type Map as MLMap, type Marker, type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { PlayHole } from "../lib/courses";
+import type { CourseFeatures, LatLng, PlayHole } from "../lib/courses";
+import { DEFAULT_TOOLS, type MapTools } from "../lib/yardage";
+import { getCourseFeatures } from "../lib/db";
+import { buildOverlay, drawTags, drawToolLines, placeTarget, TOOL_ROWS, type ToolsInput, type ToolsOverlay } from "./mapTools";
 import { colorFor, initials } from "./Avatar";
 import { courseFeatures } from "../lib/courseShapes";
 
@@ -52,9 +55,20 @@ export interface MapFocus {
   zoom?: number;
 }
 
-export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, interactive = true }: {
+const TOOLS_KEY = "fairwhere.mapTools";
+function loadTools(): MapTools {
+  try {
+    return { ...DEFAULT_TOOLS, ...JSON.parse(localStorage.getItem(TOOLS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULT_TOOLS;
+  }
+}
+
+export function MapView({ pins = [], course, tools, focus, bottomPad = 0, onPin, interactive = true }: {
   pins?: MapPin[];
   course?: CourseOverlay | null;
+  /** The hole being played (yardage, measure, hazards, rings). Null hides the tools button. */
+  tools?: (ToolsInput & { courseId: string }) | null;
   focus?: MapFocus;
   bottomPad?: number;
   onPin?: (id: string) => void;
@@ -79,7 +93,9 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
       attributionControl: { compact: true },
       pitchWithRotate: false,
     });
-    m.on("style.load", () => drawCourse(m, courseRef.current));
+    m.on("style.load", () => (drawCourse(m, courseRef.current), drawToolLines(m, overlayRef.current)));
+    // Measure: a tap on the map moves the target there.
+    m.on("click", (e) => measureRef.current && setTarget({ hole: holeRef.current, pt: [e.lngLat.lat, e.lngLat.lng] }));
     map.current = m;
     return () => {
       m.remove();
@@ -94,8 +110,49 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
 
   useEffect(() => {
     const m = map.current;
-    if (m) whenReady(m, () => drawCourse(m, courseRef.current));
+    if (m) whenReady(m, () => (drawCourse(m, courseRef.current), drawToolLines(m, overlayRef.current)));
   }, [course]);
+
+  // ---- hole tools
+  const [opts, setOpts] = useState<MapTools>(loadTools);
+  const [panel, setPanel] = useState(false);
+  const [target, setTarget] = useState<{ hole: number; pt: LatLng } | null>(null);
+  const [feats, setFeats] = useState<{ id: string; f: CourseFeatures | null } | null>(null);
+  const holeRef = useRef(0);
+  const measureRef = useRef(false);
+  const overlayRef = useRef<ToolsOverlay>({ lines: [], tags: [], target: null });
+  const tagMarkers = useRef<Marker[]>([]);
+  const targetMarker = useRef<Marker | null>(null);
+  holeRef.current = tools?.hole.n ?? 0;
+  measureRef.current = Boolean(tools && opts.measure);
+
+  const toggle = (k: keyof MapTools) => {
+    const next = { ...opts, [k]: !opts[k] };
+    setOpts(next);
+    if (k === "measure") setTarget(null); // starts fresh, halfway to the green
+    try {
+      localStorage.setItem(TOOLS_KEY, JSON.stringify(next));
+    } catch { /* private mode: just not remembered */ }
+  };
+
+  // Hazards need the course's mapped bunkers / water (loaded once per course, on demand).
+  useEffect(() => {
+    if (!tools || tools.features !== undefined || !opts.hazards || feats?.id === tools.courseId) return;
+    const id = tools.courseId;
+    getCourseFeatures(id).then((f) => setFeats({ id, f })).catch(() => setFeats({ id, f: null }));
+  }, [tools?.courseId, opts.hazards]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const pt = target && tools && target.hole === tools.hole.n ? target.pt : null;
+    const f = tools?.features !== undefined ? tools.features : feats && tools && feats.id === tools.courseId ? feats.f : null;
+    const o = buildOverlay(tools ?? null, opts, pt, f);
+    overlayRef.current = o;
+    whenReady(m, () => drawToolLines(m, o));
+    tagMarkers.current = drawTags(m, o.tags, tagMarkers.current);
+    targetMarker.current = placeTarget(m, o.target, targetMarker.current, (p) => setTarget({ hole: holeRef.current, pt: p }));
+  }, [tools?.hole, tools?.gps?.[0], tools?.gps?.[1], opts, target, feats]);
 
   // Avatar pins: plain DOM markers, updated in place so they glide instead of flicker.
   useEffect(() => {
@@ -150,11 +207,28 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
       <div ref={el} className="map-bg" />
       {interactive && (
         <div className="map-controls">
+          {tools && (
+            <button aria-label="Map tools" aria-expanded={panel} aria-pressed={panel} onClick={() => setPanel(!panel)}>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+                <path d="M12 3 2.5 8 12 13l9.5-5L12 3z" /><path d="m2.5 12 9.5 5 9.5-5" /><path d="m2.5 16 9.5 5 9.5-5" />
+              </svg>
+            </button>
+          )}
           <button aria-label={sat ? "Show map" : "Show satellite"} aria-pressed={sat} onClick={() => setSat(!sat)}>
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />
             </svg>
           </button>
+        </div>
+      )}
+      {interactive && tools && panel && (
+        <div className="map-tools" role="group" aria-label="Map tools">
+          {TOOL_ROWS.map((r) => (
+            <label key={r.key} className="map-tool">
+              <input type="checkbox" checked={opts[r.key]} onChange={() => toggle(r.key)} />
+              <span><b>{r.label}</b><small>{r.sub}</small></span>
+            </label>
+          ))}
         </div>
       )}
     </>

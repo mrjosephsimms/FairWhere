@@ -244,7 +244,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
 
       <div className="stats">
         <div className="stat">
-          <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "On hole"}</span>
+          <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "Hole"}</span>
           <b>{round.hole}<small>/18</small></b>
           <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>
         </div>
