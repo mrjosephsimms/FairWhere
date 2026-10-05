@@ -6,6 +6,8 @@ import { isOff, summarizeWatch } from "../lib/notify";
 import { DEFAULT_TARGET, type Mode } from "../lib/pace";
 import { ModeIcon } from "../components/ModeIcon";
 import { toYards } from "../lib/onCourse";
+import { AWAY_FROM_COURSE_M, metresFromCourse } from "../lib/leaveCourse";
+import type { LatLng } from "../lib/courses";
 import type { GpsState } from "../lib/tracker";
 import { fmtDur } from "../lib/time";
 import { useAction, type LiveData } from "../lib/hooks";
@@ -83,9 +85,21 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   const ninesBad = Boolean(course?.nines && front === back);
   const selectedEmpty = visibility === "selected" && viewers.size === 0;
 
-  function submit(e: FormEvent) {
+  const [checking, setChecking] = useState(false);
+  const [away, setAway] = useState<number | null>(null); // metres from the course, when they seem not to be there
+
+  async function submit(e: FormEvent, anyway = false) {
     e.preventDefault();
     if (!course || ninesBad || selectedEmpty) return;
+    if (!anyway) {
+      // Not at the course? Ask first (they may be sharing ahead of a later tee time).
+      setChecking(true);
+      const here = await currentPosition();
+      setChecking(false);
+      const m = here ? metresFromCourse(course, here) : 0;
+      if (m > AWAY_FROM_COURSE_M) return setAway(m);
+    }
+    setAway(null);
     run(() =>
       startRound({
         course_id: course.id,
@@ -176,7 +190,18 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
             <p className="note">You haven't added any friends yet.</p>
           ))}
       </fieldset>
-      <button className="btn" disabled={busy || ninesBad || selectedEmpty}>Start sharing my round</button>
+      {away != null ? (
+        <div className="confirm" role="alertdialog" aria-label="Not at a golf course?">
+          <b>Hey, it doesn't look like you're at a golf course.</b>
+          <span className="note">You're about {fmtDistance(away)} from {course?.name}. Start sharing your round anyway?</span>
+          <div className="actions">
+            <button type="button" className="btn" disabled={busy} onClick={(e) => submit(e, true)}>Start anyway</button>
+            <button type="button" className="btn ghost" onClick={() => setAway(null)}>Not yet</button>
+          </div>
+        </div>
+      ) : (
+        <button className="btn" disabled={busy || checking || ninesBad || selectedEmpty}>{checking ? "Checking where you are…" : "Start sharing my round"}</button>
+      )}
       <p className="note">Friends see your hole, tee time and estimated finish. Sharing stops when you finish.</p>
       {err && <p className="note err" role="alert">{err}</p>}
     </form>
@@ -332,4 +357,18 @@ function Watchers({ data, golfer }: { data: LiveData; golfer: string }) {
     </section>
   );
 }
+
+/** One quick GPS reading for the "are you at the course?" check; null if unavailable or refused. */
+function currentPosition(): Promise<LatLng | null> {
+  return new Promise((ok) => {
+    if (!("geolocation" in navigator)) return ok(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => ok([p.coords.latitude, p.coords.longitude]),
+      () => ok(null),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 },
+    );
+  });
+}
+
+const fmtDistance = (m: number) => (m < 1609 ? `${Math.round(m / 10) * 10} m` : `${Math.round(m / 1609.34)} mi`);
 

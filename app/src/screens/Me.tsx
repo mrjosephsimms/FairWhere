@@ -12,6 +12,7 @@ import { supabase } from "../lib/supabase";
 import { Avatar } from "../components/Avatar";
 import { HoleStrip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
+import { LocationSharing } from "./LocationSharing";
 
 interface History {
   rounds: Round[];
@@ -53,6 +54,7 @@ export function Me({ data, me, now }: { data: LiveData; me: string; now: number 
   return (
     <div className="list">
       <ProfileCard data={data} me={me} />
+      <LocationSharing data={data} me={me} />
 
       {histErr && <p className="note err">Couldn't load your stats: {histErr}</p>}
       {stats && (

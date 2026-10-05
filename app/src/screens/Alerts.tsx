@@ -8,6 +8,7 @@ import type { LiveData } from "../lib/hooks";
 import { describeNote, isOff, NO_ALERTS } from "../lib/notify";
 import { ago } from "../lib/time";
 import { Avatar } from "../components/Avatar";
+import { untilText } from "./LocationSharing";
 
 const nameIn = (data: LiveData, id: string) => data.profiles.get(id)?.display_name || "Golfer";
 
@@ -94,6 +95,8 @@ function Switch({ label, hint, on, set }: { label: string; hint: string; on: boo
 /** A friend who isn't playing right now. */
 export function PersonCard({ data, me, id, onAlerts }: { data: LiveData; me: string; id: string; onAlerts: () => void }) {
   const p = data.profiles.get(id);
+  const spot = data.spots.find((s) => s.user_id === id);
+  const share = data.shares.find((s) => s.owner_id === id && s.viewer_id === me);
   const watching = data.watches.some((w) => w.watcher_id === me && w.golfer_id === id);
   return (
     <div className="list">
@@ -103,6 +106,9 @@ export function PersonCard({ data, me, id, onAlerts }: { data: LiveData; me: str
           <b>{nameIn(data, id)}</b>
           {p?.username && <span className="sub">@{p.username}</span>}
           <span className="sub">Not on the course right now</span>
+          {share && (
+            <span className="spot-line">📍 Sharing their location with you {untilText(share.expires_at)}{spot ? ` · updated ${ago(Date.parse(spot.updated_at), Date.now())}` : " · no update yet"}</span>
+          )}
         </div>
         <button className="btn" onClick={onAlerts}>{watching ? "🔔 Edit alerts" : "🔔 Get alerts when they play"}</button>
       </section>

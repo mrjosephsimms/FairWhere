@@ -54,7 +54,11 @@ export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPe
           <Avatar id={id} name={nameOf(id)} photo={p?.avatar_url} />
           <span className="row-main">
             <b>{nameOf(id)}</b>
-            <span className="sub">{p?.username ? `@${p.username}` : "Not on the course"}</span>
+            <span className="sub">
+              {data.spots.some((x) => x.user_id === id)
+                ? `📍 Sharing location · ${ago(Date.parse(data.spots.find((x) => x.user_id === id)!.updated_at), now)}`
+                : p?.username ? `@${p.username}` : "Not on the course"}
+            </span>
           </span>
         </button>
       );

@@ -310,4 +310,51 @@ select pg_temp.fails($$insert into public.notifications (user_id, golfer_id, rou
 select pg_temp.fails($$select public.notify_tick()$$, 'clients cannot run the alert job');
 reset role;
 
+-- Everyday location sharing (off by default, owner grants per person) and the gone-home backup.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+insert into public.locations (lat, lng, accuracy) values (33.50, -117.15, 12);
+select pg_temp.fails($$insert into public.locations (user_id, lat, lng) values ('00000000-0000-0000-0000-00000000000b', 1, 1)$$, 'cannot write someone else''s location');
+select pg_temp.fails($$insert into public.location_shares (viewer_id) values ('00000000-0000-0000-0000-00000000000c')$$, 'can only share location with a friend');
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+set role authenticated;
+select pg_temp.ok((select count(*) = 0 from public.locations), 'by default a friend cannot see your everyday location');
+select pg_temp.fails($$insert into public.location_shares (owner_id, viewer_id) values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b')$$, 'nobody can grant themselves access to someone');
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+insert into public.location_shares (viewer_id, expires_at) values ('00000000-0000-0000-0000-00000000000b', now() + interval '1 hour');
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+set role authenticated;
+select pg_temp.ok((select count(*) = 1 from public.locations where user_id = '00000000-0000-0000-0000-00000000000a'), 'friend sees it once you share with them');
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+set role authenticated;
+select pg_temp.ok((select count(*) = 0 from public.locations), 'nobody else does');
+reset role;
+update public.location_shares set expires_at = now() - interval '1 minute';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+set role authenticated;
+select pg_temp.ok((select count(*) = 0 from public.locations), 'an expired share shows nothing');
+reset role;
+select public.notify_tick();
+select pg_temp.ok((select count(*) = 0 from public.location_shares) and (select count(*) = 0 from public.locations),
+  'minute job ends expired shares and forgets the position');
+
+-- Gone home without finishing: a fresh fix 2+ km away ends the round; on the course it doesn't.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+insert into public.rounds (course_id, tee_time, last_lat, last_lng, last_fix_at) values ('redhawk', now() - interval '2 hours', 33.468, -117.092, now());
+reset role;
+select public.notify_tick();
+select pg_temp.ok(exists (select 1 from public.rounds where user_id = '00000000-0000-0000-0000-00000000000a' and status = 'live'), 'a round with the golfer on the course keeps going');
+select pg_temp.ok((select public.metres_from_course('redhawk', 33.468083, -117.09208) < 5), 'distance to the course is ~0 on the 1st tee');
+set session_replication_role = replica;
+update public.rounds set last_lat = 33.60, last_lng = -117.20, last_fix_at = now() - interval '2 minutes' where user_id = '00000000-0000-0000-0000-00000000000a' and status = 'live';
+set session_replication_role = origin;
+select public.notify_tick();
+select pg_temp.ok(not exists (select 1 from public.rounds where user_id = '00000000-0000-0000-0000-00000000000a' and (status = 'live' or last_lat is not null)), 'left the course (2+ km away): round finished, location wiped');
+
 \warn 'All RLS tests passed.'

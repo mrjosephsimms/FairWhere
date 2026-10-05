@@ -77,6 +77,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Only if you turn on everyday location sharing: lets the people you chose see where you are even when the app is closed. Off unless you share with someone, and you can stop anytime.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Find My Golfer uses your location during a round you choose to share, to work out which hole you're on so friends can see your progress and finish time. Sharing stops when the round ends.</string>
 </dict>

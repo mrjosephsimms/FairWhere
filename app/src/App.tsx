@@ -7,6 +7,7 @@ import { roundInfo, visibleRounds } from "./lib/roundInfo";
 import { courseBounds, roundPosition } from "./lib/geo";
 import { playSequence } from "./lib/courses";
 import { useRoundTracker } from "./lib/tracker";
+import { usePresenceSharing } from "./lib/presence";
 import { StopConfirm } from "./components/RoundView";
 import { MapView, type CourseOverlay, type MapFocus, type MapPin } from "./components/MapView";
 import { Sheet, type Detent } from "./components/Sheet";
@@ -85,7 +86,18 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       return undefined;
     }
   }, [liveCourse, liveNines]);
-  const gps = useRoundTracker(live, liveSeq);
+  const sharingWith = data.shares.filter((s) => s.owner_id === me);
+  usePresenceSharing(sharingWith.length > 0);
+  const [notice, setNotice] = useState<string | null>(null);
+  const gps = useRoundTracker(live, liveSeq, () => {
+    setNotice("Looks like you left the course, so we finished your round and stopped sharing.");
+    data.reload();
+  });
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   useEffect(() => {
     if (invite) (setTab("people"), setSelected(null), setAdding(true), setDetent("full"));
@@ -119,6 +131,15 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       }),
     [rounds, data.courses, data.profiles, now, me, selected, live?.id, gps.fix],
   );
+  // Friends sharing their everyday location with you (unless they're on the course, where their round pin shows).
+  const spotPins: MapPin[] = useMemo(
+    () =>
+      data.spots
+        .filter((s) => s.user_id !== me && !rounds.some((r) => r.user_id === s.user_id && r.status === "live"))
+        .map((s) => ({ id: `spot-${s.user_id}`, lat: s.lat, lng: s.lng, name: data.profiles.get(s.user_id)?.display_name || "Golfer",
+          photo: data.profiles.get(s.user_id)?.avatar_url, selected: person === s.user_id })),
+    [data.spots, data.profiles, rounds, me, person],
+  );
 
   // The course on the map: whoever's selected, else your own live round on the Round tab.
   const focusRound = sel ?? (tab === "round" ? live : undefined);
@@ -134,6 +155,8 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       const on = course.seq.find((h) => h.n === course.current); // by number: a game overlay holds just one hole
       return { key, bounds: courseBounds(on ? [on] : course.seq) };
     }
+    const spot = person ? data.spots.find((s) => s.user_id === person) : undefined;
+    if (spot) return { key: `${key}|spot-${person}`, center: [spot.lng, spot.lat], zoom: 15 };
     if (pins.length === 1) return { key, center: [pins[0].lng, pins[0].lat], zoom: 15 };
     if (pins.length) {
       const lats = pins.map((p) => p.lat), lngs = pins.map((p) => p.lng);
@@ -223,12 +246,19 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   return (
     <div className="app">
-      <MapView pins={pins} course={course} focus={focus} bottomPad={sheetPx} onPin={openRound} />
+      <MapView pins={[...pins, ...spotPins]} course={course} focus={focus} bottomPad={sheetPx}
+        onPin={(id) => (id.startsWith("spot-") ? openPerson(id.slice(5)) : openRound(id))} />
       <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20.5 3.5 3.8 10.6c-.9.4-.8 1.7.2 1.9l6.6 1.2 1.3 6.6c.2 1 1.5 1.1 1.9.2L20.5 3.5z" /></svg>
       </button>
       {live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
+      {!live && sharingWith.length > 0 && (
+        <button className="loc-pill" onClick={() => go("me")}>
+          📍 Sharing location with {sharingWith.length === 1 ? data.profiles.get(sharingWith[0].viewer_id)?.display_name || "1 person" : `${sharingWith.length} people`}
+        </button>
+      )}
       {data.error && <p className="toast err" role="alert">Couldn't refresh: {data.error}</p>}
+      {notice && <p className="toast" role="status" onClick={() => setNotice(null)}>{notice}</p>}
       <NoteBanner data={data} onOpen={(n) => (rounds.some((r) => r.id === n.round_id) ? openRound(n.round_id) : openInbox())} />
 
       <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header}

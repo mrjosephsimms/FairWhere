@@ -308,6 +308,48 @@ export async function markNotesRead(ids: string[]) {
   if (ids.length) check(await supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids));
 }
 
+// ------------------------------------------------------------------ everyday location sharing
+
+/** `owner_id` lets `viewer_id` see their everyday location until `expires_at` (null = until turned off). */
+export interface LocationShare {
+  owner_id: string;
+  viewer_id: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
+/** Someone's latest everyday position (visible only while they share it with you). */
+export interface Spot {
+  user_id: string;
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  updated_at: string;
+}
+
+/** Shares you've given and ones given to you (expired ones are left out). */
+export async function listShares(): Promise<LocationShare[]> {
+  const rows: LocationShare[] = check(await supabase.from("location_shares").select("*"));
+  return rows.filter((s) => !s.expires_at || Date.parse(s.expires_at) > Date.now());
+}
+
+export async function shareLocation(viewerId: string, expiresAt: Date | null) {
+  check(await supabase.from("location_shares").upsert({ viewer_id: viewerId, expires_at: expiresAt?.toISOString() ?? null }));
+}
+
+/** Owner stops sharing, or viewer stops seeing. */
+export async function endShare(ownerId: string, viewerId: string) {
+  check(await supabase.from("location_shares").delete().eq("owner_id", ownerId).eq("viewer_id", viewerId));
+}
+
+export async function listSpots(): Promise<Spot[]> {
+  return check(await supabase.from("locations").select("*"));
+}
+
+export async function saveMySpot(lat: number, lng: number, accuracy: number) {
+  check(await supabase.from("locations").upsert({ lat, lng, accuracy, updated_at: new Date().toISOString() }));
+}
+
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */
 export async function endRound(id: string, how: "done" | "cancelled") {
   check(await supabase.from("rounds").update({ status: how }).eq("id", id));

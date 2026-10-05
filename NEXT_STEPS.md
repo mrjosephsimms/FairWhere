@@ -42,6 +42,13 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   plus a Google OAuth client. Email sign-in works without them.
 - Open product questions from `docs/handoff/HANDOFF.md` §8 (spectator links, showing scores).
 
+## Location (2026-10-04)
+- Built: everyday location sharing (off by default, owner grants per person with an expiry), "not at a golf
+  course" check on Start a Round, auto-finish when the golfer leaves the course (client 10 min / 3 km rule +
+  server 2 km backup in notify_tick). Web sends everyday location only while the app is open.
+- Native TODO: background location for everyday sharing needs the background-geolocation plugin + UIBackgroundModes
+  `location` + requesting "Always" only when sharing is turned on (purpose string already in Info.plist).
+
 ## Then: Milestone 3 (background GPS)
 - Port the patch-package fix for `@capacitor-community/background-geolocation@1.2.26` from the SaleMap
   repo (`frontend/patches/…` + `postinstall`); see CLAUDE.md.

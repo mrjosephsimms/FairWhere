@@ -3,8 +3,9 @@
 // yardage, spots ball hunts, and writes to the round sparingly (HANDOFF §4).
 import { useEffect, useRef, useState } from "react";
 import type { LatLng, PlayHole } from "./courses";
-import { updateRoundPosition, type Round } from "./db";
-import { makeHoleTracker } from "./holeDetect";
+import { endRound, updateRoundPosition, type Round } from "./db";
+import { makeHoleTracker, nearestOnLine } from "./holeDetect";
+import { makeLeaveDetector } from "./leaveCourse";
 import { locateOnHole, makeSearchDetector, type HolePosition } from "./onCourse";
 
 /** Write at most this often unless the hole or ball-hunt state changes. */
@@ -22,12 +23,21 @@ export interface GpsState {
 
 const OFF: GpsState = { status: "off", fix: null, pos: null, searchingSince: null };
 
-export function useRoundTracker(round: Round | undefined, seq: PlayHole[] | undefined): GpsState {
+/**
+ * `onLeft` fires if the golfer clearly leaves the course without finishing (the round
+ * is then finished for them, which stops sharing and wipes their location).
+ */
+export function useRoundTracker(round: Round | undefined, seq: PlayHole[] | undefined, onLeft?: () => void): GpsState {
   const [state, setState] = useState<GpsState>(OFF);
   const hole = useRef(round?.hole ?? 1);
   hole.current = round?.hole ?? 1; // manual -/+ wins; GPS only ever moves forward
   const roundId = round?.status === "live" ? round.id : undefined;
   const riding = round?.mode !== "walking";
+  const leftCb = useRef(onLeft);
+  leftCb.current = onLeft;
+  // If their last saved fix was on the course, they've been there (survives a reload).
+  const lastFix = useRef<LatLng | null>(null);
+  lastFix.current = round?.last_lat != null && round?.last_lng != null ? [round.last_lat, round.last_lng] : null;
 
   useEffect(() => {
     if (!roundId || !seq) return setState(OFF);
@@ -38,12 +48,21 @@ export function useRoundTracker(round: Round | undefined, seq: PlayHole[] | unde
     const onFix = makeHoleTracker();
     // Riders park the cart on the path while they play, so give them longer.
     const hunt = makeSearchDetector({ minMs: (riding ? 4 : 3) * 60000 });
-    let lastWrite = 0, lastSearching: number | null = null, writing = false;
+    let lastWrite = 0, lastSearching: number | null = null, writing = false, ended = false;
+    const fromCourse = (pt: LatLng) => Math.min(...lines.map((l) => nearestOnLine(l, pt).d));
+    const left = makeLeaveDetector({}, lastFix.current != null && fromCourse(lastFix.current) <= 200);
 
     const id = navigator.geolocation.watchPosition(
       (p) => {
         if (p.coords.accuracy > MAX_ACCURACY_M) return;
         const pt: LatLng = [p.coords.latitude, p.coords.longitude], t = p.timestamp || Date.now();
+        if (ended) return;
+        // Forgot to finish and went home: finish it for them (stops sharing, wipes location).
+        if (left(fromCourse(pt), t)) {
+          ended = true;
+          endRound(roundId, "done").then(() => leftCb.current?.()).catch(() => (ended = false));
+          return;
+        }
         const r = onFix(lines, pt, hole.current);
         const now = r.offCourse ? hole.current : r.hole;
         const pos = r.offCourse ? null : locateOnHole(seq[now - 1], pt);
