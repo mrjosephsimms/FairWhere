@@ -84,19 +84,53 @@ export function initDeepLinks(onInvite: (code: string) => void): void {
   });
 }
 
-/** Open the phone's share sheet (text, WhatsApp, AirDrop...); copy to the clipboard if there isn't one. */
-export async function shareText(text: string, url?: string): Promise<"shared" | "copied"> {
+/**
+ * Open the phone's share sheet (text, WhatsApp, AirDrop...). Browsers only offer it on
+ * secure (https) pages, so without it: copy if we can and open Messages pre-filled
+ * (iOS/Android), else just copy. Says what actually happened.
+ */
+export async function shareText(text: string, url?: string): Promise<"shared" | "copied" | "texted" | "failed"> {
+  const full = url ? `${text} ${url}` : text;
   if (isNative || navigator.share) {
     try {
       if (isNative) await Share.share({ title: "FairWhere", text, url });
       else await navigator.share({ title: "FairWhere", text, url });
       return "shared";
-    } catch {
-      /* cancelled: fall through to copy */
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") return "shared"; // they closed the sheet
     }
   }
-  await navigator.clipboard?.writeText(url ? `${text} ${url}` : text);
-  return "copied";
+  const copied = await copyText(full);
+  if (/iPhone|iPad|Android/i.test(navigator.userAgent)) {
+    window.location.href = `sms:${/Android/i.test(navigator.userAgent) ? "?" : "&"}body=${encodeURIComponent(full)}`;
+    return "texted";
+  }
+  return copied ? "copied" : "failed";
+}
+
+/** Clipboard API where allowed (https), else the old select-and-copy trick (works on http too). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through */
+  }
+  const area = Object.assign(document.createElement("textarea"), { value: text, readOnly: true });
+  area.style.cssText = "position:fixed;top:-1000px;opacity:0";
+  document.body.append(area);
+  area.select();
+  area.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  area.remove();
+  return ok;
 }
 
 /** Invite someone new: your code plus a link that signs them up and adds you. */

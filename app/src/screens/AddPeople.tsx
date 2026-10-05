@@ -123,7 +123,8 @@ function ShareYours({ code, name, username, onMsg }: { code: string; name: strin
     if (view !== "qr") return;
     QRCode.toDataURL(link, { width: 480, margin: 1, color: { dark: "#14321f", light: "#ffffff" } }).then(setQr).catch(() => setQr(null));
   }, [view, link]);
-  const copied = (r: "shared" | "copied") => onMsg(r === "copied" ? "Copied. Paste it into a text." : null);
+  const copied = (r: Awaited<ReturnType<typeof shareInvite>>) =>
+    onMsg(r === "copied" ? "Copied. Paste it into a text." : r === "failed" ? `Couldn't open sharing here. Send them this: ${link}` : null);
 
   return (
     <section className="card share">
