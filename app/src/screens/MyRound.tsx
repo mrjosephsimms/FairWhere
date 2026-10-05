@@ -14,7 +14,7 @@ import { fmtDur } from "../lib/time";
 import { useAction, type LiveData } from "../lib/hooks";
 import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
-import { HoleStrip, PaceChip, StopConfirm } from "../components/RoundView";
+import { HoleStrip, PaceChip } from "../components/RoundView";
 
 const PACES = [
   [210, "3h 30m"],
@@ -227,7 +227,6 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 }
 
 function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; now: number; gps: GpsState }) {
-  const [confirmStop, setConfirmStop] = useState(false);
   const { busy, err, run } = useAction(data.reload);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <div className="card empty">Loading course…</div>;
@@ -275,14 +274,11 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
     <ScoreCard round={round} now={now} pars={seq.map((h) => h.par)} data={data} />
     <Watchers data={data} golfer={round.user_id} />
     <div className="list">
-      <div className="actions">
-        {round.hole < 18 && (
-          <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish early</button>
-        )}
-        <button className="btn ghost" onClick={() => setConfirmStop(true)}>Stop sharing</button>
-      </div>
-      {confirmStop && (
-        <StopConfirm busy={busy} onYes={() => run(() => endRound(round.id, "cancelled"))} onNo={() => setConfirmStop(false)} />
+      {/* Stopping without finishing lives on the "Sharing live" chip up top; on 18 the main button finishes. */}
+      {round.hole < 18 && (
+        <div className="actions">
+          <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish round</button>
+        </div>
       )}
       {err && <p className="note err" role="alert">{err}</p>}
     </div>
