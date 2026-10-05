@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { playSequence, type CourseData } from "../lib/courses";
 import {
-  getCourses, getMyHistory, listCourses, setAvatar, setDisplayName, setHomeCourse, setUsername, USERNAME_RE, type GamePlay, type Round,
+  getCourses, getMyHistory, listCourses, setAvatar, setDisplayName, setHomeCourse, setUsername, USERNAME_RE, type CourseSummary, type GamePlay, type Round,
 } from "../lib/db";
 import { useAction, type LiveData } from "../lib/hooks";
 import { profileStats } from "../lib/stats";
@@ -127,7 +127,7 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
   const [handle, setHandle] = useState("");
   const [uploading, setUploading] = useState(false);
   const file = useRef<HTMLInputElement>(null);
-  const [courses, setCourses] = useState<CourseData[] | null>(null);
+  const [courses, setCourses] = useState<CourseSummary[] | null>(null);
   useEffect(() => {
     listCourses().then(setCourses).catch(() => setCourses([]));
   }, []);

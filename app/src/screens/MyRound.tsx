@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import type { CourseData } from "../lib/courses";
-import { endRound, getScores, listCourses, setHole, setScore, startRound, type Round } from "../lib/db";
+import { endRound, getCourses, getScores, listCourses, setHole, setScore, startRound, type CourseSummary, type Round } from "../lib/db";
 import { fmtToPar, summarize } from "../lib/score";
 import { isOff, summarizeWatch } from "../lib/notify";
 import { DEFAULT_TARGET, type Mode } from "../lib/pace";
@@ -9,6 +8,7 @@ import { toYards } from "../lib/onCourse";
 import { AWAY_FROM_COURSE_M, metresFromCourse } from "../lib/leaveCourse";
 import { CourseSearch } from "../components/CourseSearch";
 import type { LatLng } from "../lib/courses";
+import { distM } from "../lib/holeDetect";
 import type { GpsState } from "../lib/tracker";
 import { fmtDur } from "../lib/time";
 import { useAction, type LiveData } from "../lib/hooks";
@@ -43,7 +43,7 @@ export function MyRound({ data, me, now, gps }: { data: LiveData; me: string; no
 }
 
 function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
-  const [courses, setCourses] = useState<CourseData[] | null>(null);
+  const [courses, setCourses] = useState<CourseSummary[] | null>(null);
   const [courseId, setCourseId] = useState("");
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
@@ -76,9 +76,13 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
       .catch(() => {});
   }, []);
   useEffect(() => {
-    if (!here || !courses?.length) return;
-    const nearest = courses.reduce((a, b) => (metresFromCourse(b, here) < metresFromCourse(a, here) ? b : a));
-    if (metresFromCourse(nearest, here) < AWAY_FROM_COURSE_M) setCourseId(nearest.id);
+    const near = here && courses?.filter((c) => c.spot).sort((a, b) => distM(a.spot!, here) - distM(b.spot!, here))[0];
+    if (!here || !near) return;
+    // Rough pick by the course's middle, then check properly against its holes.
+    getCourses([near.id]).then((m) => {
+      const full = m.get(near.id);
+      if (full && metresFromCourse(full, here) < AWAY_FROM_COURSE_M) setCourseId(near.id);
+    }).catch(() => {});
   }, [here, courses]);
 
   const course = courses?.find((c) => c.id === courseId);
@@ -113,7 +117,8 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
       setChecking(true);
       const here = await currentPosition();
       setChecking(false);
-      const m = here ? metresFromCourse(course, here) : 0;
+      const full = here ? (await getCourses([course.id]).catch(() => null))?.get(course.id) : null;
+      const m = here && full ? metresFromCourse(full, here) : 0;
       if (m > AWAY_FROM_COURSE_M) return setAway(m);
     }
     setAway(null);

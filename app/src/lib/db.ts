@@ -1,7 +1,7 @@
 // Typed data access. Every read is filtered by RLS on the server
 // (supabase/migrations/20261003000001_init.sql); nothing here is a security boundary.
 import { supabase } from "./supabase";
-import type { CourseData, CourseFeatures } from "./courses";
+import type { CourseData, CourseFeatures, LatLng } from "./courses";
 import type { Mode } from "./pace";
 
 export interface Profile {
@@ -109,11 +109,25 @@ export async function removeFriendship(f: Pick<Friendship, "user_id" | "friend_i
 
 const courseCache = new Map<string, CourseData>();
 
-export async function listCourses(): Promise<CourseData[]> {
-  const rows = check(await supabase.from("courses").select("data").order("name"));
-  const list = (rows as { data: CourseData }[]).map((r) => r.data);
-  list.forEach((c) => courseCache.set(c.id, c));
-  return list;
+/** What the course pickers need. Hole maps are big, so they load (getCourses) once a course is picked. */
+export interface CourseSummary {
+  id: string;
+  name: string;
+  address: string | null;
+  nines: string[] | null;
+  /** Roughly the middle of the course (a few tees averaged), for nearest-first sorting. */
+  spot: LatLng | null;
+}
+
+export async function listCourses(): Promise<CourseSummary[]> {
+  const rows = check(await supabase.from("courses")
+    .select("id,name,address,nines,t0:data->holes->0->centerline->0,t3:data->holes->3->centerline->0,t12:data->holes->12->centerline->0")
+    .order("name"));
+  return (rows as unknown as (Omit<CourseSummary, "spot"> & Record<string, LatLng | null>)[]).map(({ t0, t3, t12, ...c }) => {
+    const pts = [t0, t3, t12].filter((p): p is LatLng => Array.isArray(p));
+    const spot = pts.length ? ([pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length] as LatLng) : null;
+    return { id: c.id, name: c.name, address: c.address, nines: c.nines, spot };
+  });
 }
 
 export async function getCourses(ids: string[]): Promise<Map<string, CourseData>> {

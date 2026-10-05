@@ -1,14 +1,17 @@
 // Course picker: tap, start typing, pick from the suggestions. Nearest courses come
 // first (with distances) when the phone has already allowed location.
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CourseData, LatLng } from "../lib/courses";
-import { metresFromCourse } from "../lib/leaveCourse";
+import type { LatLng } from "../lib/courses";
+import type { CourseSummary } from "../lib/db";
+import { distM } from "../lib/holeDetect";
+
+type Named = { name: string; address: string | null };
 
 /** Lower-case words, for "starts with" matching on any word ("red" finds "Redhawk Golf Club"). */
 const words = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-const town = (c: CourseData) => c.address?.split(",").map((x) => x.trim()).find((x) => /[a-z]/i.test(x) && !/\d/.test(x)) ?? "";
+const town = (c: Named) => c.address?.split(",").map((x) => x.trim()).find((x) => /[a-z]/i.test(x) && !/\d/.test(x)) ?? "";
 
-export function matchCourses(courses: CourseData[], query: string): CourseData[] {
+export function matchCourses<C extends Named>(courses: C[], query: string): C[] {
   const q = words(query);
   if (!q.length) return courses;
   return courses.filter((c) => {
@@ -18,7 +21,7 @@ export function matchCourses(courses: CourseData[], query: string): CourseData[]
 }
 
 export function CourseSearch({ courses, value, onChange, here }: {
-  courses: CourseData[];
+  courses: CourseSummary[];
   value: string;
   onChange: (id: string) => void;
   /** Where the phone is, if known: sorts nearest first. */
@@ -31,7 +34,7 @@ export function CourseSearch({ courses, value, onChange, here }: {
 
   const dist = useMemo(() => {
     const m = new Map<string, number>();
-    if (here) courses.forEach((c) => m.set(c.id, metresFromCourse(c, here)));
+    if (here) courses.forEach((c) => m.set(c.id, c.spot ? distM(c.spot, here) : Infinity));
     return m;
   }, [courses, here]);
 
@@ -48,7 +51,7 @@ export function CourseSearch({ courses, value, onChange, here }: {
   }, [open]);
 
   const pick = (id: string) => (onChange(id), setOpen(false), setQuery(""));
-  const miles = (m: number) => (m < 1609 ? "here" : `${(m / 1609.34).toFixed(m < 16093 ? 1 : 0)} mi`);
+  const miles = (m: number) => (!isFinite(m) ? "" : m < 1609 ? "here" : `${(m / 1609.34).toFixed(m < 16093 ? 1 : 0)} mi`);
 
   return (
     <div className="course-search" ref={box}>
