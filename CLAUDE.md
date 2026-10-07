@@ -9,6 +9,7 @@ Live golf round sharing. **Start with `NEXT_STEPS.md`** (current state + pending
 ## Stack
 - `app/`: Vite + React 19 + TS + Capacitor 8 (iOS via Swift Package Manager, no CocoaPods). Plain CSS tokens in `app/src/styles.css` (light + dark).
 - `supabase/migrations/`: the whole backend. Schema, RLS, RPCs, cron. No server.
+- **Launch goal**: `docs/LAUNCH_GOAL.md` (v1.0 scope + checklist); evidence in `docs/LAUNCH_AUDIT.md`.
 - Pure logic lives in `app/src/lib/` (`pace.ts`, `holeDetect.ts`, `courses.ts`, `time.ts`) with vitest tests next to each file.
 
 ## Rules
