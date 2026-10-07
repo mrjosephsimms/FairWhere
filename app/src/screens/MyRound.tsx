@@ -16,6 +16,7 @@ import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
 import { HoleStrip, PaceChip } from "../components/RoundView";
 import { getCurrentFix, locationAlreadyAllowed } from "../lib/location";
+import { features } from "../lib/features";
 
 const PACES = [
   [210, "3h 30m"],
@@ -327,7 +328,7 @@ function ScoreCard({ round, now, pars, data }: { round: Round; now: number; pars
         <button className="pad-btn" aria-label="One more stroke" onClick={() => save((val ?? par) + 1)}>+</button>
       </div>
       <HoleStrip round={round} now={now} scores={scores} pars={pars} selected={sel} onSelect={setSel} />
-      <Challengers round={round} scores={scores} data={data} />
+      {features.game && <Challengers round={round} scores={scores} data={data} />}
       {err && <p className="note err" role="alert">{err}</p>}
     </section>
   );

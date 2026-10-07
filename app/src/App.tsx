@@ -9,6 +9,7 @@ import { bearingDeg, courseBounds, roundPosition } from "./lib/geo";
 import { playSequence } from "./lib/courses";
 import { useRoundTracker } from "./lib/tracker";
 import { usePresenceSharing } from "./lib/presence";
+import { features } from "./lib/features";
 import { StopConfirm } from "./components/RoundView";
 import { MapView, type CourseOverlay, type MapFocus, type MapPin } from "./components/MapView";
 import { Sheet, type Detent } from "./components/Sheet";
@@ -22,7 +23,8 @@ import { AlertSettings, Inbox, NoteBanner, PersonCard } from "./screens/Alerts";
 type Tab = "people" | "round" | "me";
 
 // The 3D hole game (three.js) only downloads when someone taps Play.
-const HoleGame = lazy(() => import("./game3d/HoleGame"));
+// Off for v1 (lib/features.ts): `false ?` lets the build drop the game and three.js entirely.
+const HoleGame = features.game ? lazy(() => import("./game3d/HoleGame")) : null;
 // Dev-only playground (?demo=game&hole=N); import.meta.env.DEV strips it from builds.
 const Demo = import.meta.env.DEV ? lazy(() => import("./game3d/Demo")) : null;
 const MapDemo = import.meta.env.DEV ? lazy(() => import("./components/MapDemo")) : null; // ?demo=map&hole=N&at=0.4
@@ -98,7 +100,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       return undefined;
     }
   }, [liveCourse, liveNines]);
-  const sharingWith = data.shares.filter((s) => s.owner_id === me);
+  const sharingWith = features.everydayLocation ? data.shares.filter((s) => s.owner_id === me) : [];
   usePresenceSharing(sharingWith.length > 0);
   const [notice, setNotice] = useState<string | null>(null);
   const gps = useRoundTracker(live, liveSeq, () => {
@@ -146,7 +148,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   // Friends sharing their everyday location with you (unless they're on the course, where their round pin shows).
   const spotPins: MapPin[] = useMemo(
     () =>
-      data.spots
+      (features.everydayLocation ? data.spots : [])
         .filter((s) => s.user_id !== me && !rounds.some((r) => r.user_id === s.user_id && r.status === "live"))
         .map((s) => ({ id: `spot-${s.user_id}`, lat: s.lat, lng: s.lng, name: data.profiles.get(s.user_id)?.display_name || "Golfer",
           photo: data.profiles.get(s.user_id)?.avatar_url, selected: person === s.user_id })),
@@ -176,7 +178,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       const green = on.green?.center ?? on.centerline[on.centerline.length - 1];
       return { key: `${key}|h${on.n}`, bounds: courseBounds([on]), zoom: 18, bearing: bearingDeg(on.centerline[0], green), line: [on.centerline[0], green] };
     }
-    const spot = person ? data.spots.find((s) => s.user_id === person) : undefined;
+    const spot = person && features.everydayLocation ? data.spots.find((s) => s.user_id === person) : undefined;
     if (spot) return { key: `${key}|spot-${person}`, center: [spot.lng, spot.lat], zoom: 15 };
     if (pins.length === 1) return { key, center: [pins[0].lng, pins[0].lat], zoom: 15 };
     if (pins.length) {
@@ -287,7 +289,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   return (
     <div className="app">
-      <MapView pins={[...pins, ...spotPins]} course={course} tools={tools} focus={focus} bottomPad={sheetPx}
+      <MapView pins={[...pins, ...spotPins]} course={course} tools={features.mapTools ? tools : null} focus={focus} bottomPad={sheetPx}
         onPin={(id) => (id.startsWith("spot-") ? openPerson(id.slice(5)) : openRound(id))} />
       <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20.5 3.5 3.8 10.6c-.9.4-.8 1.7.2 1.9l6.6 1.2 1.3 6.6c.2 1 1.5 1.1 1.9.2L20.5 3.5z" /></svg>
@@ -315,7 +317,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         ) : adding ? (
           <AddPeople data={data} me={me} incomingCode={invite} onCodeUsed={clearInvite} />
         ) : sel ? (
-          <RoundDetail round={sel} data={data} me={me} now={now} onPlay={setGame} onBlocked={afterBlock} />
+          <RoundDetail round={sel} data={data} me={me} now={now} onPlay={features.game ? setGame : undefined} onBlocked={afterBlock} />
         ) : tab === "people" ? (
           <People data={data} me={me} now={now} rounds={rounds} query={search ?? ""} onOpen={openRound} onPerson={openPerson} onAddPeople={openAdding} />
         ) : tab === "round" ? (
@@ -337,7 +339,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         </TabButton>
       </nav>
 
-      {sel && gameHole && (
+      {HoleGame && sel && gameHole && (
         <Suspense fallback={<div className="hg-loading">Loading the course…</div>}>
           <HoleGame
             roundId={sel.id}

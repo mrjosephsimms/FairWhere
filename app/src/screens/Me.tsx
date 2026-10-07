@@ -21,6 +21,7 @@ import { LocationSharing } from "./LocationSharing";
 import { CourseSearch } from "../components/CourseSearch";
 import { PasswordForm } from "../components/PasswordForm";
 import { dismissPasswordPrompt, hasPassword, shouldAskForPassword, useAuthUser } from "../lib/password";
+import { features } from "../lib/features";
 
 interface History {
   rounds: Round[];
@@ -63,7 +64,7 @@ export function Me({ data, me, now, onEdit }: { data: LiveData; me: string; now:
     <div className="list">
       <ProfileHeader data={data} me={me} onEdit={onEdit} />
       <PasswordPrompt />
-      <LocationSharing data={data} me={me} />
+      {features.everydayLocation && <LocationSharing data={data} me={me} />}
 
       {histErr && <p className="note err">Couldn't load your stats: {histErr}</p>}
       {stats && (
@@ -78,7 +79,7 @@ export function Me({ data, me, now, onEdit }: { data: LiveData; me: string; now:
             <Stat label={stats.birdies === 1 ? "Birdie" : "Birdies"} value={stats.birdies} sub={`${stats.pars} par${stats.pars === 1 ? "" : "s"}`} />
             <Stat label="Average round" value={stats.avgMinutes != null ? fmtDur(stats.avgMinutes * 60000) : "—"} />
             <Stat label="Fastest round" value={stats.fastestMinutes != null ? fmtDur(stats.fastestMinutes * 60000) : "—"} />
-            <Stat label="Hole game" value={`${stats.gameWins}/${stats.gamePlays}`} sub="wins / plays" />
+            {features.game && <Stat label="Hole game" value={`${stats.gameWins}/${stats.gamePlays}`} sub="wins / plays" />}
           </div>
           {stats.favoriteCourse && stats.favoriteCourse !== data.profiles.get(me)?.home_course_id && (
             <p className="note">Most played: <b>{courseName(stats.favoriteCourse)}</b></p>
