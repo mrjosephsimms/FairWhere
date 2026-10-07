@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { endRound, getCourses, getScores, listCourses, setHole, setScore, startRound, type CourseSummary, type Round } from "../lib/db";
 import { fmtToPar, summarize } from "../lib/score";
 import { isOff, summarizeWatch } from "../lib/notify";
@@ -228,6 +228,7 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 
 function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; now: number; gps: GpsState }) {
   const { busy, err, run } = useAction(data.reload);
+  const [debugOn, tapDebug] = useGpsDebugToggle();
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <div className="card empty">Loading course…</div>;
   const { est, hole, label, seq } = info;
@@ -243,7 +244,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
 
       <div className="stats">
         <div className="stat">
-          <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "Hole"}</span>
+          <span className="label" onClick={tapDebug}>{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "Hole"}</span>
           <b>{round.hole}<small>/18</small></b>
           <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>
         </div>
@@ -259,6 +260,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
           <span>{Math.round(gps.pos.frac * 100)}% of the hole · {toYards(gps.pos.fromTeeM)} yds from the tee</span>
         </div>
       )}
+      {debugOn && <GpsDebugPanel gps={gps} now={now} />}
       {gps.searchingSince && <p className="hunt">🔎 Ball hunt? {fmtDur(now - gps.searchingSince)} in this spot. Your friends can see it.</p>}
       <p className="note finish">Finish around <b>{fmtTime(est.eta)}</b></p>
       <div className="stepper">
@@ -327,6 +329,45 @@ function ScoreCard({ round, now, pars, data }: { round: Round; now: number; pars
       <Challengers round={round} scores={scores} data={data} />
       {err && <p className="note err" role="alert">{err}</p>}
     </section>
+  );
+}
+
+const DEBUG_KEY = "fairwhere.gpsDebug";
+
+/** Hidden field-test panel (tap "Hole" 5 times): is GPS arriving, and what does the detector think? */
+function useGpsDebugToggle() {
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem(DEBUG_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const taps = useRef<number[]>([]);
+  const tap = () => {
+    const t = Date.now();
+    taps.current = [...taps.current.filter((x) => t - x < 2000), t];
+    if (taps.current.length < 5) return;
+    taps.current = [];
+    setOn(!on);
+    try {
+      localStorage.setItem(DEBUG_KEY, on ? "0" : "1");
+    } catch { /* not remembered */ }
+  };
+  return [on, tap] as const;
+}
+
+function GpsDebugPanel({ gps, now }: { gps: GpsState; now: number }) {
+  const d = gps.debug;
+  const age = gps.fix ? Math.round((now - gps.fix.t) / 1000) : null;
+  return (
+    <dl className="gps-debug" aria-label="GPS debug">
+      <dt>GPS</dt><dd>{gps.status}{gps.fix ? ` · ±${Math.round(gps.fix.acc)} m · ${age}s ago` : ""}</dd>
+      <dt>Fixes</dt><dd>{d.fixes} used · {d.skipped} too vague</dd>
+      <dt>Detector</dt><dd>{d.candidate != null ? `hole ${d.candidate} · ${Math.round(d.d ?? 0)} m from line` : "off the course"}</dd>
+      <dt>Writes</dt><dd>{d.writes}</dd>
+      {gps.fix && <><dt>Fix</dt><dd>{gps.fix.pt[0].toFixed(5)}, {gps.fix.pt[1].toFixed(5)}</dd></>}
+    </dl>
   );
 }
 

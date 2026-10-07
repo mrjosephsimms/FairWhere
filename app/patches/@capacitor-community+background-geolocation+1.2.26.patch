@@ -1,0 +1,64 @@
+diff --git a/node_modules/@capacitor-community/background-geolocation/Package.swift b/node_modules/@capacitor-community/background-geolocation/Package.swift
+index d235202..302ba7d 100644
+--- a/node_modules/@capacitor-community/background-geolocation/Package.swift
++++ b/node_modules/@capacitor-community/background-geolocation/Package.swift
+@@ -13,7 +13,7 @@ let package = Package(
+     dependencies: [
+         .package(
+             url: "https://github.com/ionic-team/capacitor-swift-pm.git",
+-            from: "7.0.0"
++            "7.0.0"..<"9.0.0"
+         )
+     ],
+     targets: [
+diff --git a/node_modules/@capacitor-community/background-geolocation/ios/Plugin/Swift/Plugin.swift b/node_modules/@capacitor-community/background-geolocation/ios/Plugin/Swift/Plugin.swift
+index d4a5965..99a8009 100644
+--- a/node_modules/@capacitor-community/background-geolocation/ios/Plugin/Swift/Plugin.swift
++++ b/node_modules/@capacitor-community/background-geolocation/ios/Plugin/Swift/Plugin.swift
+@@ -98,11 +98,19 @@ public class BackgroundGeolocation: CAPPlugin,
+                 .full,
+                 .charging
+             ].contains(UIDevice.current.batteryState)
++            // FairWhere: "balanced" = ~10 m (enough for hole detection, far kinder to the
++            // battery over a 4-hour round than Best).
+             manager.desiredAccuracy = (
+-                externalPower
++                call.getString("accuracy") == "balanced"
++                ? kCLLocationAccuracyNearestTenMeters
++                : externalPower
+                 ? kCLLocationAccuracyBestForNavigation
+                 : kCLLocationAccuracyBest
+             )
++            // FairWhere: golfers walk / ride a cart; .fitness keeps iOS from pausing it like a car trip.
++            if call.getString("activityType") == "fitness" {
++                manager.activityType = .fitness
++            }
+             var distanceFilter = call.getDouble("distanceFilter")
+             // It appears that setting manager.distanceFilter to 0 can prevent
+             // subsequent location updates. See issue #88.
+@@ -114,6 +122,9 @@ public class BackgroundGeolocation: CAPPlugin,
+             manager.showsBackgroundLocationIndicator = background
+             manager.pausesLocationUpdatesAutomatically = false
+             self.watchers.append(watcher)
++            // FairWhere: background updates work with "While Using" when the watcher starts in
++            // the foreground (blue indicator), so only ask for "Always" when explicitly requested.
++            let wantsAlways = background && call.getBool("requestAlways") == true
+             if call.getBool("requestPermissions") != false {
+                 let status = CLLocationManager.authorizationStatus()
+                 if [
+@@ -122,13 +133,13 @@ public class BackgroundGeolocation: CAPPlugin,
+                     .restricted,
+                 ].contains(status) {
+                     return (
+-                        background
++                        wantsAlways
+                         ? manager.requestAlwaysAuthorization()
+                         : manager.requestWhenInUseAuthorization()
+                     )
+                 }
+                 if (
+-                    background && status == .authorizedWhenInUse
++                    wantsAlways && status == .authorizedWhenInUse
+                 ) {
+                     // Attempt to escalate.
+                     manager.requestAlwaysAuthorization()
