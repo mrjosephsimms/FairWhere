@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { phoneSignInEnabled, supabase } from "../lib/supabase";
-import { authRedirect, isNative, LINKS, openLink, signInWithApple } from "../lib/native";
+import { AUTH_LINK_FAILED, authRedirect, isNative, LINKS, openLink, signInWithApple } from "../lib/native";
 import { prettyPhone, toE164 } from "../lib/phone";
 import { PasswordInput } from "../components/PasswordInput";
+import { friendlyError } from "../lib/errors";
 
 type Via = "email" | "phone";
 
@@ -20,13 +21,18 @@ export function SignIn() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    const failed = () => setErr("That sign-in link has expired or was already used. Enter the code from the email, or send a new one.");
+    window.addEventListener(AUTH_LINK_FAILED, failed);
+    return () => window.removeEventListener(AUTH_LINK_FAILED, failed);
+  }, []);
 
   async function run(fn: () => Promise<{ error: { message: string } | null }>) {
     setBusy(true);
     setErr(null);
     try {
       const { error } = await fn();
-      if (error) setErr(error.message);
+      if (error) setErr(friendlyError(error, "Couldn't sign you in. Try again."));
       return !error;
     } finally {
       setBusy(false);

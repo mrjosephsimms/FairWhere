@@ -12,6 +12,7 @@ import { ago } from "../lib/time";
 import { Avatar } from "../components/Avatar";
 import { untilText } from "./LocationSharing";
 import { features } from "../lib/features";
+import { friendlyError } from "../lib/errors";
 
 const nameIn = (data: LiveData, id: string) => data.profiles.get(id)?.display_name || "Golfer";
 
@@ -20,19 +21,44 @@ export function AlertSettings({ data, me, golferId }: { data: LiveData; me: stri
   const saved = data.watches.find((w) => w.watcher_id === me && w.golfer_id === golferId);
   const [w, setW] = useState<WatchSettings>(saved ?? NO_ALERTS);
   const [err, setErr] = useState<string | null>(null);
-  const [mode, setMode] = useState<"off" | "every" | "pick">(saved?.every_hole ? "every" : saved?.holes.length ? "pick" : "off");
+  const modeOf = (x: WatchSettings): "off" | "every" | "pick" => (x.every_hole ? "every" : x.holes.length ? "pick" : "off");
+  const [mode, setMode] = useState<"off" | "every" | "pick">(modeOf(saved ?? NO_ALERTS));
   const name = nameIn(data, golferId);
 
+  // Taps update the screen at once and save in the background: one save at a time, the latest
+  // settings win, and a failure puts the switches back to what's actually saved.
+  const confirmed = useRef<WatchSettings>(saved ?? NO_ALERTS);
+  const pending = useRef<WatchSettings | null>(null);
+  const saving = useRef(false);
+  async function flush() {
+    if (saving.current) return;
+    saving.current = true;
+    while (pending.current) {
+      const next = pending.current;
+      pending.current = null;
+      try {
+        await (isOff(next) ? removeWatch(me, golferId) : saveWatch(golferId, next));
+        confirmed.current = next;
+      } catch (e) {
+        if (!pending.current) (setW(confirmed.current), setMode(modeOf(confirmed.current)));
+        setErr(friendlyError(e, "Couldn't save your alerts. Try again."));
+      }
+    }
+    saving.current = false;
+    data.reload();
+  }
   function update(next: WatchSettings) {
     setW(next);
     setErr(null);
-    (isOff(next) ? removeWatch(me, golferId) : saveWatch(golferId, next)).then(data.reload).catch((e) => setErr(`Couldn't save: ${e.message}`));
+    pending.current = next;
+    void flush();
   }
   const toggleHole = (h: number) => update({ ...w, every_hole: false, holes: w.holes.includes(h) ? w.holes.filter((x) => x !== h) : [...w.holes, h] });
 
   return (
     <div className="list alerts">
       <p className="note">Alerts about {name}'s rounds. You'll get these every time they play. {name} can see that you get updates.</p>
+      {err && <p className="note err" role="alert">{err}</p>}
       {!isOff(w) && <PushOffer name={name} />}
 
       <section className="card">
@@ -82,7 +108,6 @@ export function AlertSettings({ data, me, golferId }: { data: LiveData; me: stri
         <Switch label="Finished" hint="With their score, if they keep one" on={w.finished} set={(v) => update({ ...w, finished: v })} />
         <Switch label="Ball hunt 🔎" hint="When they've been searching for a ball a few minutes" on={w.ball_hunt} set={(v) => update({ ...w, ball_hunt: v })} />
       </section>
-      {err && <p className="note err" role="alert">{err}</p>}
     </div>
   );
 }
@@ -174,7 +199,7 @@ export function PersonCard({ data, me, id, onAlerts, onBlocked }: { data: LiveDa
 }
 
 /** Your alerts, newest first. Opening the list marks them read. */
-export function Inbox({ data, onOpen }: { data: LiveData; onOpen: (roundId: string) => void }) {
+export function Inbox({ data, onOpen }: { data: LiveData; onOpen: (n: Note) => void }) {
   // Keyed on the unread ids as a string so a fresh array each render doesn't re-run it.
   const unread = data.notes.filter((n) => !n.read_at).map((n) => n.id).join(",");
   const reload = data.reload;
@@ -193,7 +218,7 @@ export function Inbox({ data, onOpen }: { data: LiveData; onOpen: (roundId: stri
       {data.notes.map((n) => {
         const d = describeNote(n, nameIn(data, n.golfer_id));
         return (
-          <button key={n.id} className={`row-btn${n.read_at ? "" : " unread"}`} onClick={() => onOpen(n.round_id)}>
+          <button key={n.id} className={`row-btn${n.read_at ? "" : " unread"}`} onClick={() => onOpen(n)}>
             <Avatar id={n.golfer_id} name={nameIn(data, n.golfer_id)} photo={data.profiles.get(n.golfer_id)?.avatar_url} size={40} />
             <span className="row-main">
               <b className="note-title">{d.title}</b>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { passwordProblem, savePassword } from "../lib/password";
 import { PasswordInput } from "./PasswordInput";
+import { friendlyError } from "../lib/errors";
 
 /** New-password field + Save. Used by the Me-tab prompt and Edit profile. */
 export function PasswordForm({ label, cta, onSaved, children }: {
@@ -21,7 +22,7 @@ export function PasswordForm({ label, cta, onSaved, children }: {
     setBusy(true);
     const { error } = await savePassword(pw);
     setBusy(false);
-    if (error) return setMsg({ err: true, text: error.message });
+    if (error) return setMsg({ err: true, text: friendlyError(error, "Couldn't save your password. Try again.") });
     setPw("");
     setMsg({ err: false, text: "Password saved. Use it next time you sign in." });
     onSaved?.();

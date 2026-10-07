@@ -17,6 +17,8 @@ import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time
 import { HoleStrip, PaceChip } from "../components/RoundView";
 import { getCurrentFix, locationAlreadyAllowed } from "../lib/location";
 import { features } from "../lib/features";
+import { friendlyError } from "../lib/errors";
+import * as haptic from "../lib/haptics";
 
 const PACES = [
   [210, "3h 30m"],
@@ -57,8 +59,10 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   const [viewers, setViewers] = useState<Set<string>>(new Set());
   const { busy, err, run } = useAction(data.reload);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [loadTry, setLoadTry] = useState(0);
 
   useEffect(() => {
+    setLoadErr(null);
     listCourses()
       .then((cs) => {
         setCourses(cs);
@@ -66,8 +70,8 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
         const home = data.profiles.get(me)?.home_course_id;
         setCourseId(cs.find((c) => c.id === home)?.id ?? cs[0]?.id ?? "");
       })
-      .catch((e) => setLoadErr(e.message));
-  }, []);
+      .catch((e) => setLoadErr(friendlyError(e, "Couldn't load the courses.")));
+  }, [loadTry]);
 
   // If the phone has already allowed location, sort courses nearest-first and
   // preselect the one they're standing on. (Never prompts just for this.)
@@ -133,11 +137,18 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
         mode,
         visibility,
         viewers: [...viewers],
-      }),
+      }).then(haptic.success),
     );
   }
 
-  if (loadErr) return <p className="note err">Couldn't load courses: {loadErr}</p>;
+  if (loadErr)
+    return (
+      <div className="card empty">
+        <b>Couldn't load the courses</b>
+        <span>{loadErr}</span>
+        <button className="btn ghost" onClick={() => setLoadTry((n) => n + 1)}>Try again</button>
+      </div>
+    );
   if (!courses) return <div className="card empty">Loading courses…</div>;
 
   return (
@@ -231,10 +242,17 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; now: number; gps: GpsState }) {
   const { busy, err, run } = useAction(data.reload);
   const [debugOn, tapDebug] = useGpsDebugToggle();
+  // (Hooks stay above the early "Loading course" return.)
+  // A new hole (tapped or from GPS): the number pops; a light tap when GPS moved it for you.
+  const prevHole = useRef(round.hole);
+  useEffect(() => {
+    if (round.hole > prevHole.current && !busy) haptic.tap();
+    prevHole.current = round.hole;
+  }, [round.hole]);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <div className="card empty">Loading course…</div>;
   const { est, hole, label, seq } = info;
-  const go = (n: number) => n >= 1 && n <= 18 && n !== round.hole && run(() => setHole(round.id, n));
+  const go = (n: number) => n >= 1 && n <= 18 && n !== round.hole && (haptic.tap(), run(() => setHole(round.id, n)));
 
   return (
     <>
@@ -247,7 +265,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
       <div className="stats">
         <div className="stat">
           <span className="label" onClick={tapDebug}>{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "Hole"}</span>
-          <b>{round.hole}<small>/18</small></b>
+          <b key={round.hole} className="hole-num">{round.hole}<small>/18</small></b>
           <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>
         </div>
         <div className="stat">
@@ -270,10 +288,11 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
         {round.hole < 18 ? (
           <button className="btn" disabled={busy} onClick={() => go(round.hole + 1)}>On to hole {round.hole + 1}</button>
         ) : (
-          <button className="btn flag" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish round</button>
+          <button className="btn flag" disabled={busy} onClick={() => run(() => endRound(round.id, "done").then(haptic.success))}>Finish round</button>
         )}
         <button className="btn ghost" aria-label="Forward one hole" disabled={busy || round.hole >= 18} onClick={() => go(round.hole + 1)}>+</button>
       </div>
+      {err && <p className="note err" role="alert">{err}</p>}
     </div>
     <ScoreCard round={round} now={now} pars={seq.map((h) => h.par)} data={data} />
     <Watchers data={data} golfer={round.user_id} />
@@ -281,10 +300,9 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
       {/* Stopping without finishing lives on the "Sharing live" chip up top; on 18 the main button finishes. */}
       {round.hole < 18 && (
         <div className="actions">
-          <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish round</button>
+          <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done").then(haptic.success))}>Finish round</button>
         </div>
       )}
-      {err && <p className="note err" role="alert">{err}</p>}
     </div>
     </>
   );
@@ -296,18 +314,52 @@ function ScoreCard({ round, now, pars, data }: { round: Round; now: number; pars
   const [sel, setSel] = useState(round.hole);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => setSel(round.hole), [round.hole]); // follow the golfer to each new hole
+  // What the server has, the newest tap per hole, and holes with a save in flight.
+  const confirmed = useRef(new Map<number, number>());
+  const latest = useRef(new Map<number, number>());
+  const sending = useRef(new Set<number>());
   useEffect(() => {
-    getScores(round.id).then(setScores).catch((e) => setErr(e.message));
+    getScores(round.id)
+      .then((m) => ((confirmed.current = new Map(m)), setScores(m)))
+      .catch((e) => setErr(friendlyError(e, "Couldn't load your scores.")));
   }, [round.id]);
 
   const par = pars[sel - 1];
   const val = scores.get(sel);
   const sum = summarize(scores, pars);
   function save(n: number) {
-    const strokes = Math.min(Math.max(n, 1), 20), prev = scores;
-    setScores(new Map(scores).set(sel, strokes)); // optimistic
+    const hole = sel, strokes = Math.min(Math.max(n, 1), 20);
+    setScores((s) => new Map(s).set(hole, strokes)); // shown at once
+    haptic.tap();
+    latest.current.set(hole, strokes);
     setErr(null);
-    setScore(round.id, sel, strokes).catch((e) => (setScores(prev), setErr(`Couldn't save that score: ${e.message}`)));
+    void pump(hole);
+  }
+  // Rapid taps: send one at a time, always the newest; if the last one fails, show what's saved.
+  async function pump(hole: number) {
+    if (sending.current.has(hole)) return;
+    sending.current.add(hole);
+    try {
+      for (;;) {
+        const v = latest.current.get(hole);
+        if (v == null) break;
+        try {
+          await setScore(round.id, hole, v);
+          confirmed.current.set(hole, v);
+        } catch (e) {
+          if (latest.current.get(hole) === v) {
+            const c = confirmed.current.get(hole);
+            setScores((s) => { const m = new Map(s); if (c == null) m.delete(hole); else m.set(hole, c); return m; });
+            latest.current.delete(hole);
+            setErr(friendlyError(e, "Couldn't save that score. Try again."));
+          }
+          continue;
+        }
+        if (latest.current.get(hole) === v) latest.current.delete(hole);
+      }
+    } finally {
+      sending.current.delete(hole);
+    }
   }
 
   return (
@@ -320,11 +372,17 @@ function ScoreCard({ round, now, pars, data }: { round: Round; now: number; pars
       </div>
       <div className="score-pad">
         <button className="pad-btn" aria-label="One fewer stroke" onClick={() => save((val ?? par) - 1)}>−</button>
-        <button className={`pad-val${val == null ? " unset" : ""}`} onClick={() => val == null && save(par)}
-          aria-label={val == null ? `Hole ${sel}: tap to enter par` : `Hole ${sel}: ${val} strokes`}>
-          <b>{val ?? par}</b>
-          <span>Hole {sel} · Par {par}</span>
-        </button>
+        {val == null ? (
+          <button className="pad-val unset" onClick={() => save(par)} aria-label={`Hole ${sel}: tap to enter par`}>
+            <b>{par}</b>
+            <span>Hole {sel} · Par {par}</span>
+          </button>
+        ) : (
+          <div className="pad-val" role="status" aria-label={`Hole ${sel}: ${val} strokes`}>
+            <b>{val}</b>
+            <span>Hole {sel} · Par {par}</span>
+          </div>
+        )}
         <button className="pad-btn" aria-label="One more stroke" onClick={() => save((val ?? par) + 1)}>+</button>
       </div>
       <HoleStrip round={round} now={now} scores={scores} pars={pars} selected={sel} onSelect={setSel} />

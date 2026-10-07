@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { blockUser, deleteMyAccount, listBlocks, reportUser, unblockUser, type Blocked, type ReportReason } from "../lib/db";
 import { LINKS, openLink } from "../lib/native";
 import { supabase } from "../lib/supabase";
-import { forgetThisPhone } from "../lib/push";
+import { friendlyError } from "../lib/errors";
 
 const REASONS: [ReportReason, string][] = [
   ["photo", "Inappropriate photo"],
@@ -31,7 +31,7 @@ export function SafetyActions({ target, name, onBlocked }: { target: string; nam
       await fn();
       after();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -88,7 +88,17 @@ export function SafetyActions({ target, name, onBlocked }: { target: string; nam
 /** Edit profile: people you've blocked, with Unblock. */
 export function BlockedList({ me }: { me: string }) {
   const [list, setList] = useState<Blocked[] | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const load = () => listBlocks().then(setList).catch(() => setList([]));
+  const unblock = (id: string) => {
+    setBusyId(id);
+    setErr(null);
+    unblockUser(me, id)
+      .then(load)
+      .catch((e) => setErr(friendlyError(e, "Couldn't unblock. Try again.")))
+      .finally(() => setBusyId(null));
+  };
   useEffect(() => void load(), []);
   if (!list?.length) return null;
   return (
@@ -97,10 +107,11 @@ export function BlockedList({ me }: { me: string }) {
       {list.map((b) => (
         <div key={b.id} className="row-between">
           <span>{b.display_name || "Golfer"}{b.username ? <span className="sub"> @{b.username}</span> : null}</span>
-          <button className="btn ghost small" onClick={() => unblockUser(me, b.id).then(load)}>Unblock</button>
+          <button className="btn ghost small" disabled={busyId != null} onClick={() => unblock(b.id)}>{busyId === b.id ? "…" : "Unblock"}</button>
         </div>
       ))}
       <span className="note">Unblocking doesn't make you buddies again; either of you can send a new request.</span>
+      {err && <span className="note err" role="alert">{err}</span>}
     </div>
   );
 }
@@ -120,11 +131,10 @@ export function DeleteAccount({ me }: { me: string }) {
           setBusy(true);
           setErr(null);
           try {
-            await forgetThisPhone().catch(() => {});
-            await deleteMyAccount(me);
+            await deleteMyAccount(me); // also removes this phone's push registration
             await supabase.auth.signOut();
           } catch (e) {
-            setErr(`Couldn't delete: ${(e as Error).message}`);
+            setErr(friendlyError(e, "Couldn't delete your account. Check your connection and try again."));
             setBusy(false);
           }
         }}>{busy ? "Deleting…" : "Delete everything"}</button>

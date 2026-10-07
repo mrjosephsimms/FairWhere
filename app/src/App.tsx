@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { supabaseConfigured } from "./lib/supabase";
 import { initDeepLinks, takePendingAdd } from "./lib/native";
 import { initPush, type PushTarget } from "./lib/push";
+import { followTextSize } from "./lib/textSize";
 import { useAction, useLiveData, useNow, useSession } from "./lib/hooks";
 import { endRound } from "./lib/db";
 import { roundInfo, visibleRounds } from "./lib/roundInfo";
@@ -10,6 +11,8 @@ import { playSequence } from "./lib/courses";
 import { useRoundTracker } from "./lib/tracker";
 import { usePresenceSharing } from "./lib/presence";
 import { features } from "./lib/features";
+import { useOffline } from "./lib/useOffline";
+import { needsWelcome, Welcome } from "./screens/Welcome";
 import { StopConfirm } from "./components/RoundView";
 import { MapView, type CourseOverlay, type MapFocus, type MapPin } from "./components/MapView";
 import { Sheet, type Detent } from "./components/Sheet";
@@ -36,6 +39,7 @@ export default function App() {
   const clearInvite = useCallback(() => setInvite(null), []);
 
   useEffect(() => initDeepLinks(setInvite), []);
+  useEffect(() => followTextSize(), []);
   // An add-me link opened before signing in: pick it up once they're in.
   useEffect(() => {
     if (session) {
@@ -71,6 +75,12 @@ export default function App() {
 
 function Main({ me, now, invite, clearInvite }: { me: string; now: number; invite: string | null; clearInvite: () => void }) {
   const data = useLiveData(me);
+  const offline = useOffline();
+  // First-run walkthrough: decided once, after the first load.
+  const [welcome, setWelcome] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (data.loaded && welcome === null) setWelcome(needsWelcome(me, data));
+  }, [data.loaded]);
   const [tab, setTab] = useState<Tab>("people");
   const [selected, setSelected] = useState<string | null>(null);
   const [detent, setDetent] = useState<Detent>("mid");
@@ -300,8 +310,13 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
           📍 Sharing location with {sharingWith.length === 1 ? data.profiles.get(sharingWith[0].viewer_id)?.display_name || "1 person" : `${sharingWith.length} people`}
         </button>
       )}
-      {data.error && <p className="toast err" role="alert">Couldn't refresh: {data.error}</p>}
-      {notice && <p className="toast" role="status" onClick={() => setNotice(null)}>{notice}</p>}
+      {offline ? (
+        <p className="toast offline" role="status">You're offline. Showing the last update; it catches up when you're back.</p>
+      ) : data.error ? (
+        <p className="toast err" role="alert">{data.error}</p>
+      ) : null}
+      {welcome && <Welcome data={data} me={me} onDone={(startRound) => (setWelcome(false), startRound && go("round"))} />}
+      {notice && <button className="toast" role="status" aria-label={`${notice} Tap to dismiss.`} onClick={() => setNotice(null)}>{notice}</button>}
       <NoteBanner data={data} onOpen={(n) => (rounds.some((r) => r.id === n.round_id) ? openRound(n.round_id) : openInbox())} />
 
       <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header}
@@ -311,7 +326,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         ) : alertsFor ? (
           <AlertSettings data={data} me={me} golferId={alertsFor} />
         ) : inbox ? (
-          <Inbox data={data} onOpen={(id) => rounds.some((r) => r.id === id) && openRound(id)} />
+          <Inbox data={data} onOpen={(n) => (rounds.some((r) => r.id === n.round_id) ? openRound(n.round_id) : openPerson(n.golfer_id))} />
         ) : person ? (
           <PersonCard data={data} me={me} id={person} onAlerts={() => (setAlertsFor(person), setDetent("full"))} onBlocked={afterBlock} />
         ) : adding ? (

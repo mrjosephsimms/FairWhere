@@ -3,13 +3,13 @@
   --bg: #f3f4f1;            /* sheet / grouped background */
   --surface: #ffffff;       /* cards, rows */
   --ink: #111813;
-  --muted: #6c746e;
-  --faint: #9aa19c;
+  --muted: #68706a;         /* AA (4.5:1) on white and --bg */
+  --faint: #6a6f6b;
   --line: rgba(17, 24, 19, .09);
-  --accent: #1f8a4c;        /* fairway green */
+  --accent: #1c7e45;        /* fairway green (AA with white text) */
   --accent-soft: #e2f3e8;
-  --flag: #e5484d;          /* current hole */
-  --good: #1f8a4c; --warn: #c27a12; --bad: #d93a3f;
+  --flag: #d04146;          /* current hole (AA with white text) */
+  --good: #1c7e45; --warn: #99600e; --bad: #d04146;
   --shadow: 0 10px 30px rgba(16, 24, 18, .16), 0 2px 6px rgba(16, 24, 18, .08);
   --tabbar: calc(64px + env(safe-area-inset-bottom));
   --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
@@ -513,3 +513,59 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 /* Map credits (top-left, below the status bar; the sheet covers the bottom). */
 .map-bg .maplibregl-ctrl-top-left { top: env(safe-area-inset-top); }
 .map-bg .maplibregl-ctrl-attrib.maplibregl-compact { margin: 10px 0 0 10px; max-width: calc(100vw - 96px); }
+
+/* Stats: the last tile fills a short last row (no hole in the grid). */
+.stat-grid > :last-child:nth-child(3n + 2) { grid-column: span 2; }
+.stat-grid > :last-child:nth-child(3n + 1) { grid-column: span 3; }
+.toast.offline { background: #2b332d; color: #fff; }
+
+/* First-run walkthrough */
+.welcome { position: fixed; inset: 0; z-index: 20; display: grid; align-items: end; justify-items: center;
+  background: rgba(17, 24, 19, .28); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.welcome-card { width: min(560px, 100%); max-height: calc(100% - env(safe-area-inset-top) - 24px); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--bg); border-radius: 26px 26px 0 0; padding: 14px 20px calc(24px + env(safe-area-inset-bottom)); box-shadow: var(--shadow); }
+.welcome-top { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+.welcome-top .link { min-height: 44px; padding: 0 4px; color: var(--muted); }
+.dots { display: flex; gap: 6px; }
+.dots i { width: 22px; height: 5px; border-radius: 3px; background: rgba(17, 24, 19, .14); transition: background .3s; }
+.dots i.on { background: var(--accent); }
+.welcome-body { display: grid; gap: 12px; padding-top: 6px; }
+.welcome-body h2 { margin: 4px 0 0; font-size: 26px; letter-spacing: -.02em; }
+.welcome-body p { margin: 0; color: var(--ink); line-height: 1.45; }
+.welcome-body .profile-photo { justify-self: center; }
+.welcome-art { font-size: 44px; text-align: center; padding-top: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  .welcome-card { animation: welcome-up .38s cubic-bezier(.2, .8, .2, 1); }
+  .welcome-body { animation: welcome-in .3s ease both; }
+  @keyframes welcome-up { from { transform: translateY(40px); opacity: 0; } }
+  @keyframes welcome-in { from { transform: translateX(14px); opacity: 0; } }
+}
+
+/* Motion (DESIGN_REFERENCES.md): small, meaningful, and off with Reduce Motion. */
+@media (prefers-reduced-motion: no-preference) {
+  /* New hole: the number pops in. */
+  .hole-num { display: inline-block; animation: hole-pop .45s cubic-bezier(.2, 1.4, .4, 1); }
+  @keyframes hole-pop { from { transform: scale(.6); opacity: 0; } }
+  /* Sharing chip / pill arriving. */
+  .sharing { animation: chip-in .35s cubic-bezier(.2, .8, .2, 1); }
+  @keyframes chip-in { from { opacity: 0; transform: translateY(-6px) scale(.96); } }
+  .sharing:not(.in-sheet) { animation-name: pill-in; }
+  @keyframes pill-in { from { opacity: 0; transform: translate(-50%, -12px); } }
+  /* A buddy who's out on the course slides into the top of the list. */
+  .row-btn:not(.idle) { animation: row-in .35s ease both; }
+  @keyframes row-in { from { opacity: 0; transform: translateY(6px); } }
+  /* Toasts and buttons respond to the finger. */
+  .toast { animation: chip-in .3s ease; }
+  .btn:active, .icon-btn:active, .pad-btn:active { transform: scale(.97); transition: transform .08s; }
+}
+/* Reduce Motion: no animation or movement anywhere (the map and sheet still jump into place). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 0s !important; scroll-behavior: auto !important; }
+}
+
+/* 44 pt touch targets for small controls, without changing how they look. */
+.icon-btn, .btn.small, .chip-btn, .link, .strip > button, .segmented.mini button, .pw-toggle, .pin { position: relative; }
+.icon-btn::after, .btn.small::after, .chip-btn::after, .strip > button::after, .segmented.mini button::after, .pw-toggle::after, .link::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%);
+}
+.strip > button::after { width: 100%; } /* neighbours are close: grow the touch area up/down only */

@@ -15,6 +15,8 @@ import { supabase } from "./supabase";
 export const isNative = Capacitor.isNativePlatform();
 export const SCHEME = "fairwhere";
 export const AUTH_REDIRECT = `${SCHEME}://auth-callback`;
+/** Window event: an email sign-in link couldn't be used (expired / already used). */
+export const AUTH_LINK_FAILED = "fairwhere:auth-link-failed";
 
 /** Where email links and OAuth should land. */
 export const authRedirect = () => (isNative ? AUTH_REDIRECT : window.location.origin + window.location.pathname);
@@ -96,7 +98,9 @@ export function initDeepLinks(onInvite: (code: string) => void): void {
     if (!url.startsWith(AUTH_REDIRECT)) return;
     try {
       const code = new URLSearchParams(url.split("?")[1] ?? "").get("code");
-      if (code) await supabase.auth.exchangeCodeForSession(code);
+      const { error } = code ? await supabase.auth.exchangeCodeForSession(code) : { error: new Error("no code") };
+      // An old or already-used email link: tell the sign-in screen (it offers the code instead).
+      if (error) window.dispatchEvent(new CustomEvent(AUTH_LINK_FAILED));
     } finally {
       Browser.close().catch(() => {});
     }

@@ -22,6 +22,7 @@ import { CourseSearch } from "../components/CourseSearch";
 import { PasswordForm } from "../components/PasswordForm";
 import { dismissPasswordPrompt, hasPassword, shouldAskForPassword, useAuthUser } from "../lib/password";
 import { features } from "../lib/features";
+import { friendlyError } from "../lib/errors";
 
 interface History {
   rounds: Round[];
@@ -38,7 +39,7 @@ export function Me({ data, me, now, onEdit }: { data: LiveData; me: string; now:
   useEffect(() => {
     getMyHistory(me)
       .then(async (h) => setHist({ ...h, courses: new Map(await getCourses(h.rounds.map((r) => r.course_id))) }))
-      .catch((e) => setHistErr(e.message));
+      .catch((e) => setHistErr(friendlyError(e, "Couldn't load your rounds.")));
   }, [me, mine]);
 
   const parsOf = useMemo(() => {
@@ -132,17 +133,17 @@ function ProfileHeader({ data, me, onEdit }: { data: LiveData; me: string; onEdi
 function PasswordPrompt() {
   const user = useAuthUser();
   const [saved, setSaved] = useState(false);
-  const [skipping, setSkipping] = useState(false);
+  const [hidden, setHidden] = useState(false);
   if (saved)
     return <section className="card"><p className="note">🔒 Password saved. Next time, sign in with it. No code needed.</p></section>;
-  if (!shouldAskForPassword(user)) return null;
+  if (hidden || !shouldAskForPassword(user)) return null;
   return (
     <section className="card pw-prompt">
       <span className="label">🔒 Make a password?</span>
       <p className="note">Sign in faster next time, without waiting for a code. Optional, and you can add one later in Edit profile.</p>
       <PasswordForm label="New password" cta="Save password" onSaved={() => setSaved(true)}>
-        <button type="button" className="btn ghost" disabled={skipping}
-          onClick={() => (setSkipping(true), dismissPasswordPrompt().finally(() => setSkipping(false)))}>Not now</button>
+        {/* Hides now; if remembering it fails, it just asks again next time. */}
+        <button type="button" className="btn ghost" onClick={() => (setHidden(true), dismissPasswordPrompt().catch(() => {}))}>Not now</button>
       </PasswordForm>
     </section>
   );
@@ -152,6 +153,10 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
   const profile = data.profiles.get(me);
   const user = useAuthUser();
   const { busy, err, run } = useAction(data.reload);
+  // Errors show next to the field that failed (they used to sit at the bottom, off-screen).
+  const [field, setField] = useState<"photo" | "name" | "username" | "home">("photo");
+  const runAt = (f: typeof field, fn: () => Promise<unknown>) => (setField(f), run(fn));
+  const fieldErr = (f: typeof field) => err && field === f ? <span className="note err" role="alert">{err}</span> : null;
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -169,7 +174,7 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
   async function pick(f: File | undefined) {
     if (!f) return;
     setUploading(true);
-    await run(async () => setAvatar(me, await resizeToJpeg(f)));
+    await runAt("photo", async () => setAvatar(me, await resizeToJpeg(f)));
     setUploading(false);
   }
 
@@ -179,15 +184,17 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
         <Avatar id={me} name={profile?.display_name || "Me"} photo={profile?.avatar_url} size={96} />
         <span className="profile-cam" aria-hidden>{uploading ? "…" : "📷"}</span>
       </button>
-      <input ref={file} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
+      <input ref={file} type="file" accept="image/*" hidden onChange={(e) => (pick(e.target.files?.[0]), (e.target.value = ""))} />
+      {fieldErr("photo")}
       <div className="profile-fields">
         <label className="f">
           Name
           <div className="inline">
             <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
             <button className="btn ghost" disabled={busy || !name.trim() || name.trim() === profile?.display_name}
-              onClick={() => run(() => setDisplayName(me, name))}>Save</button>
+              onClick={() => runAt("name", () => setDisplayName(me, name))}>Save</button>
           </div>
+          {fieldErr("name")}
         </label>
         <label className="f">
           Username {profile?.username ? "" : <em className="nudge">· pick one so friends can find you</em>}
@@ -198,21 +205,23 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
                 placeholder="yourname" onChange={(e) => setHandle(e.target.value.toLowerCase())} />
             </span>
             <button className="btn ghost" disabled={busy || !handleOk || cleanHandle === profile?.username}
-              onClick={() => run(() => setUsername(me, cleanHandle))}>Save</button>
+              onClick={() => runAt("username", () => setUsername(me, cleanHandle))}>Save</button>
           </div>
           {handle && !handleOk && <span className="note">3–20 characters: letters, numbers, _ or .</span>}
+          {fieldErr("username")}
         </label>
         <div className="f">
           Home course
           {courses ? (
             <CourseSearch courses={courses} value={profile?.home_course_id ?? ""} here={null}
-              onChange={(id) => run(() => setHomeCourse(me, id))} />
+              onChange={(id) => runAt("home", () => setHomeCourse(me, id))} ariaLabel="Home course" />
           ) : (
             <span className="note">Loading courses…</span>
           )}
           {profile?.home_course_id && (
-            <button type="button" className="link" onClick={() => run(() => setHomeCourse(me, null))}>Clear home course</button>
+            <button type="button" className="link" onClick={() => runAt("home", () => setHomeCourse(me, null))}>Clear home course</button>
           )}
+          {fieldErr("home")}
         </div>
         <PushSetting />
         <BlockedList me={me} />
@@ -221,7 +230,6 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
             cta={hasPassword(user) ? "Change" : "Save"} />
         )}
       </div>
-      {err && <p className="note err" role="alert">{err}</p>}
     </section>
   );
 }

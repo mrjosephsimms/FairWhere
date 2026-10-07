@@ -100,13 +100,32 @@ Done 2026-10-07 (PR "App Review requirements"):
   sign-in screen weren't seen on screen (that test account has no buddies; signing out would need your code).
 
 ## 5. Polish: it feels finished
-- [ ] First-run flow: name and photo → how location is used → notifications → add your first buddy (code, QR, invite link) → start a round. Every step can be skipped and resumed.
-- [ ] Every screen has deliberate empty, loading, error and offline states. No raw error strings, no layout jumps, no blank map.
-- [ ] Motion from `docs/DESIGN_REFERENCES.md`: hole change, a buddy going live, the sheet, the sharing pill, light haptics. All of it respects Reduce Motion.
+- [x] First-run flow: name and photo → how location is used → notifications → add your first buddy (code, QR, invite link) → start a round. Every step can be skipped and resumed.
+- [x] Every screen has deliberate empty, loading, error and offline states. No raw error strings, no layout jumps, no blank map.
+- [x] Motion from `docs/DESIGN_REFERENCES.md`: hole change, a buddy going live, the sheet, the sharing pill, light haptics. All of it respects Reduce Motion.
 - [ ] Accessibility: VoiceOver labels on every control and map pin, Dynamic Type up to XXL without clipping, AA contrast, 44 pt tap targets.
 - [ ] Layout checked on iPhone SE (3rd gen), iPhone 17 and iPhone 17 Pro Max, with safe areas and the keyboard. Light-only design: system dark mode must not break anything.
 - [ ] Performance on a device or simulator: cold start under 2 s to the map, smooth sheet and map drags, a 30-minute live round with no memory growth.
-- [ ] A `/interaction-audit` pass finds no dead or silently broken buttons.
+- [x] A `/interaction-audit` pass finds no dead or silently broken buttons.
+
+Done 2026-10-07 (PR "Polish"):
+- First run (`screens/Welcome.tsx`): you (photo, name, @username) → how location is used → notifications (only if
+  not yet decided) → first buddy → start a round. Skippable at every step, resumes where you left off (checked by
+  killing the app mid-way), shown only to new accounts (no username or no buddies).
+- States: `lib/errors.ts` friendlyError everywhere (tested), offline banner + catch-up on reconnect, course list
+  retry, errors shown next to what failed.
+- Motion: new-hole pop, sharing chip/pill entrance, live buddies slide in, press feedback, walkthrough slide;
+  haptics on hole change / score / round start & finish (`@capacitor/haptics`). Reduce Motion turns all of it off.
+- Accessibility: colors adjusted to WCAG AA (4.5:1) on cards and background; iPhone text size followed via
+  `@capacitor/text-zoom` (capped at 135%; checked at the largest size on Start a Round and Buddies); 44 pt touch
+  areas on small controls; labels added where the audit found gaps.
+- Audit (`/interaction-audit`-style pass): 18 findings, all fixed (alerts/scores save one at a time with real
+  rollback, inbox rows always open something, remove-buddy/unblock/password "Not now" fixed, expired email link
+  explained, same photo re-pickable, QR failure message).
+- Layout: iPhone 17 (Simulator), iPhone SE size (375×667, browser), largest text size, dark mode (stays light,
+  status bar readable).
+- **Still open:** VoiceOver walk-through on a device, iPhone 17 Pro Max check, and the performance pass (cold start,
+  30-minute round memory) — best done on your real iPhone.
 
 ## 6. Backend ready for real users
 - [ ] Every RLS test passes against a fresh database, and hosted policies match the migrations.
