@@ -18,6 +18,7 @@ import { HoleStrip, PaceChip } from "../components/RoundView";
 import { getCurrentFix, locationAlreadyAllowed } from "../lib/location";
 import { features } from "../lib/features";
 import { friendlyError } from "../lib/errors";
+import * as haptic from "../lib/haptics";
 
 const PACES = [
   [210, "3h 30m"],
@@ -136,7 +137,7 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
         mode,
         visibility,
         viewers: [...viewers],
-      }),
+      }).then(haptic.success),
     );
   }
 
@@ -241,10 +242,17 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; now: number; gps: GpsState }) {
   const { busy, err, run } = useAction(data.reload);
   const [debugOn, tapDebug] = useGpsDebugToggle();
+  // (Hooks stay above the early "Loading course" return.)
+  // A new hole (tapped or from GPS): the number pops; a light tap when GPS moved it for you.
+  const prevHole = useRef(round.hole);
+  useEffect(() => {
+    if (round.hole > prevHole.current && !busy) haptic.tap();
+    prevHole.current = round.hole;
+  }, [round.hole]);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <div className="card empty">Loading course…</div>;
   const { est, hole, label, seq } = info;
-  const go = (n: number) => n >= 1 && n <= 18 && n !== round.hole && run(() => setHole(round.id, n));
+  const go = (n: number) => n >= 1 && n <= 18 && n !== round.hole && (haptic.tap(), run(() => setHole(round.id, n)));
 
   return (
     <>
@@ -257,7 +265,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
       <div className="stats">
         <div className="stat">
           <span className="label" onClick={tapDebug}>{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "Hole"}</span>
-          <b>{round.hole}<small>/18</small></b>
+          <b key={round.hole} className="hole-num">{round.hole}<small>/18</small></b>
           <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>
         </div>
         <div className="stat">
@@ -280,7 +288,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
         {round.hole < 18 ? (
           <button className="btn" disabled={busy} onClick={() => go(round.hole + 1)}>On to hole {round.hole + 1}</button>
         ) : (
-          <button className="btn flag" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish round</button>
+          <button className="btn flag" disabled={busy} onClick={() => run(() => endRound(round.id, "done").then(haptic.success))}>Finish round</button>
         )}
         <button className="btn ghost" aria-label="Forward one hole" disabled={busy || round.hole >= 18} onClick={() => go(round.hole + 1)}>+</button>
       </div>
@@ -292,7 +300,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
       {/* Stopping without finishing lives on the "Sharing live" chip up top; on 18 the main button finishes. */}
       {round.hole < 18 && (
         <div className="actions">
-          <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish round</button>
+          <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done").then(haptic.success))}>Finish round</button>
         </div>
       )}
     </div>
@@ -322,6 +330,7 @@ function ScoreCard({ round, now, pars, data }: { round: Round; now: number; pars
   function save(n: number) {
     const hole = sel, strokes = Math.min(Math.max(n, 1), 20);
     setScores((s) => new Map(s).set(hole, strokes)); // shown at once
+    haptic.tap();
     latest.current.set(hole, strokes);
     setErr(null);
     void pump(hole);

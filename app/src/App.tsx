@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { supabaseConfigured } from "./lib/supabase";
 import { initDeepLinks, takePendingAdd } from "./lib/native";
 import { initPush, type PushTarget } from "./lib/push";
+import { followTextSize } from "./lib/textSize";
 import { useAction, useLiveData, useNow, useSession } from "./lib/hooks";
 import { endRound } from "./lib/db";
 import { roundInfo, visibleRounds } from "./lib/roundInfo";
@@ -11,6 +12,7 @@ import { useRoundTracker } from "./lib/tracker";
 import { usePresenceSharing } from "./lib/presence";
 import { features } from "./lib/features";
 import { useOffline } from "./lib/useOffline";
+import { needsWelcome, Welcome } from "./screens/Welcome";
 import { StopConfirm } from "./components/RoundView";
 import { MapView, type CourseOverlay, type MapFocus, type MapPin } from "./components/MapView";
 import { Sheet, type Detent } from "./components/Sheet";
@@ -37,6 +39,7 @@ export default function App() {
   const clearInvite = useCallback(() => setInvite(null), []);
 
   useEffect(() => initDeepLinks(setInvite), []);
+  useEffect(() => followTextSize(), []);
   // An add-me link opened before signing in: pick it up once they're in.
   useEffect(() => {
     if (session) {
@@ -73,6 +76,11 @@ export default function App() {
 function Main({ me, now, invite, clearInvite }: { me: string; now: number; invite: string | null; clearInvite: () => void }) {
   const data = useLiveData(me);
   const offline = useOffline();
+  // First-run walkthrough: decided once, after the first load.
+  const [welcome, setWelcome] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (data.loaded && welcome === null) setWelcome(needsWelcome(me, data));
+  }, [data.loaded]);
   const [tab, setTab] = useState<Tab>("people");
   const [selected, setSelected] = useState<string | null>(null);
   const [detent, setDetent] = useState<Detent>("mid");
@@ -307,6 +315,7 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       ) : data.error ? (
         <p className="toast err" role="alert">{data.error}</p>
       ) : null}
+      {welcome && <Welcome data={data} me={me} onDone={(startRound) => (setWelcome(false), startRound && go("round"))} />}
       {notice && <button className="toast" role="status" aria-label={`${notice} Tap to dismiss.`} onClick={() => setNotice(null)}>{notice}</button>}
       <NoteBanner data={data} onOpen={(n) => (rounds.some((r) => r.id === n.round_id) ? openRound(n.round_id) : openInbox())} />
 
