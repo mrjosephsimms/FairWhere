@@ -10,3 +10,6 @@ supabase/.temp/
 supabase/.branches/
 .apple/
 *.p8
+
+# Claude Code agent worktrees
+.claude/worktrees/

@@ -4,7 +4,10 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type ExpressionSpecification, type Map as MLMap, type Marker, type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { PlayHole } from "../lib/courses";
+import type { CourseFeatures, LatLng, PlayHole } from "../lib/courses";
+import { DEFAULT_TOOLS, type MapTools } from "../lib/yardage";
+import { getCourseFeatures } from "../lib/db";
+import { buildOverlay, drawTags, drawToolLines, placeTarget, TOOL_ROWS, type ToolsInput, type ToolsOverlay } from "./mapTools";
 import { colorFor, initials } from "./Avatar";
 import { courseFeatures } from "../lib/courseShapes";
 
@@ -15,7 +18,9 @@ const SATELLITE: StyleSpecification = {
   sources: {
     sat: {
       type: "raster",
-      tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      // Esri's newer "Clarity" imagery: sharper, and it lines up with OpenStreetMap's greens
+      // (the older World_Imagery was ~7 m off at Redhawk, so flags looked off the green).
+      tiles: ["https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
       tileSize: 256,
       maxzoom: 19,
       attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
@@ -50,11 +55,33 @@ export interface MapFocus {
   bounds?: [[number, number], [number, number]];
   center?: [number, number];
   zoom?: number;
+  /** Tee-to-green direction when framing one hole: Tee view turns the map to it. */
+  bearing?: number;
+  /** [tee, green] of that hole, for framing it in Tee view. */
+  line?: [LatLng, LatLng];
 }
 
-export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, interactive = true }: {
+/** Tee view tilt, and how much closer it can zoom (the far end of a tilted map shrinks). */
+const TILT = 55, TILT_ZOOM = 0.6, TILT_AIM = 0.3;
+
+/** North up (a plain map) or Tee view (turned and tilted down the hole, like standing on the tee). */
+export type MapAngle = "north" | "tee";
+const ANGLE_KEY = "fairwhere.mapAngle";
+
+const TOOLS_KEY = "fairwhere.mapTools";
+function loadTools(): MapTools {
+  try {
+    return { ...DEFAULT_TOOLS, ...JSON.parse(localStorage.getItem(TOOLS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULT_TOOLS;
+  }
+}
+
+export function MapView({ pins = [], course, tools, focus, bottomPad = 0, onPin, interactive = true }: {
   pins?: MapPin[];
   course?: CourseOverlay | null;
+  /** The hole being played (yardage, measure, hazards, rings). Null hides the tools button. */
+  tools?: (ToolsInput & { courseId: string }) | null;
   focus?: MapFocus;
   bottomPad?: number;
   onPin?: (id: string) => void;
@@ -79,7 +106,9 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
       attributionControl: { compact: true },
       pitchWithRotate: false,
     });
-    m.on("style.load", () => drawCourse(m, courseRef.current));
+    m.on("style.load", () => (drawCourse(m, courseRef.current), drawToolLines(m, overlayRef.current)));
+    // Measure: a tap on the map moves the target there.
+    m.on("click", (e) => measureRef.current && setTarget({ hole: holeRef.current, pt: [e.lngLat.lat, e.lngLat.lng] }));
     map.current = m;
     return () => {
       m.remove();
@@ -94,8 +123,49 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
 
   useEffect(() => {
     const m = map.current;
-    if (m) whenReady(m, () => drawCourse(m, courseRef.current));
+    if (m) whenReady(m, () => (drawCourse(m, courseRef.current), drawToolLines(m, overlayRef.current)));
   }, [course]);
+
+  // ---- hole tools
+  const [opts, setOpts] = useState<MapTools>(loadTools);
+  const [panel, setPanel] = useState(false);
+  const [target, setTarget] = useState<{ hole: number; pt: LatLng } | null>(null);
+  const [feats, setFeats] = useState<{ id: string; f: CourseFeatures | null } | null>(null);
+  const holeRef = useRef(0);
+  const measureRef = useRef(false);
+  const overlayRef = useRef<ToolsOverlay>({ lines: [], tags: [], target: null });
+  const tagMarkers = useRef<Marker[]>([]);
+  const targetMarker = useRef<Marker | null>(null);
+  holeRef.current = tools?.hole.n ?? 0;
+  measureRef.current = Boolean(tools && opts.measure);
+
+  const toggle = (k: keyof MapTools) => {
+    const next = { ...opts, [k]: !opts[k] };
+    setOpts(next);
+    if (k === "measure") setTarget(null); // starts fresh, halfway to the green
+    try {
+      localStorage.setItem(TOOLS_KEY, JSON.stringify(next));
+    } catch { /* private mode: just not remembered */ }
+  };
+
+  // Hazards need the course's mapped bunkers / water (loaded once per course, on demand).
+  useEffect(() => {
+    if (!tools || tools.features !== undefined || !opts.hazards || feats?.id === tools.courseId) return;
+    const id = tools.courseId;
+    getCourseFeatures(id).then((f) => setFeats({ id, f })).catch(() => setFeats({ id, f: null }));
+  }, [tools?.courseId, opts.hazards]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const pt = target && tools && target.hole === tools.hole.n ? target.pt : null;
+    const f = tools?.features !== undefined ? tools.features : feats && tools && feats.id === tools.courseId ? feats.f : null;
+    const o = buildOverlay(tools ?? null, opts, pt, f);
+    overlayRef.current = o;
+    whenReady(m, () => drawToolLines(m, o));
+    tagMarkers.current = drawTags(m, o.tags, tagMarkers.current);
+    targetMarker.current = placeTarget(m, o.target, targetMarker.current, (p) => setTarget({ hole: holeRef.current, pt: p }));
+  }, [tools?.hole, tools?.gps?.[0], tools?.gps?.[1], opts, target, feats]);
 
   // Avatar pins: plain DOM markers, updated in place so they glide instead of flicker.
   useEffect(() => {
@@ -128,6 +198,20 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
     for (const [id, mk] of markers.current) if (!seen.has(id)) (mk.remove(), markers.current.delete(id));
   }, [pins]);
 
+  const [angle, setAngle] = useState<MapAngle>(() => {
+    try {
+      return localStorage.getItem(ANGLE_KEY) === "tee" ? "tee" : "north";
+    } catch {
+      return "north";
+    }
+  });
+  const flipAngle = () => {
+    const next = angle === "tee" ? "north" : "tee";
+    setAngle(next);
+    try {
+      localStorage.setItem(ANGLE_KEY, next);
+    } catch { /* not remembered */ }
+  };
   const focusRef = useRef(focus);
   focusRef.current = focus;
   useEffect(() => {
@@ -141,20 +225,61 @@ export function MapView({ pins = [], course, focus, bottomPad = 0, onPin, intera
     // Always fitBounds: flyTo({padding}) would store the padding on the map and every later
     // fit adds its own on top. A single point is a zero-size box capped at `zoom`.
     const bounds = f.bounds ?? (f.center && [f.center, f.center]);
-    if (bounds) m.fitBounds(bounds, { padding, maxZoom: f.zoom ?? 16.5, duration: 700 });
+    // Tee view: hole runs up the screen and the map tilts back, as if looking down it from the tee.
+    // Framed by the hole's own length (a north-aligned box around a diagonal hole is far too loose).
+    if (angle === "tee" && f.bearing != null && f.line) {
+      const [a, b] = f.line, midLat = (a[0] + b[0]) / 2;
+      const lenM = Math.hypot((b[0] - a[0]) * 111320, (b[1] - a[1]) * 111320 * Math.cos((midLat * Math.PI) / 180));
+      const visH = h - top - bottom, visW = w - 2 * side;
+      const mpp = Math.max((lenM * 1.15) / visH, 70 / visW); // whole hole tall, ~70 m of fairway wide
+      const zoom = Math.min(f.zoom ?? 18, Math.log2((156543.03 * Math.cos((midLat * Math.PI) / 180)) / mpp) + TILT_ZOOM);
+      // Tilted, the near half of the screen covers far less ground than the far half, so aim
+      // the centre ~30% of the way from the tee rather than halfway.
+      const c: [number, number] = [a[1] + (b[1] - a[1]) * TILT_AIM, a[0] + (b[0] - a[0]) * TILT_AIM];
+      m.easeTo({ center: c, zoom, bearing: f.bearing, pitch: TILT, offset: [0, (top - bottom) / 2], duration: 900 });
+    } else if (bounds) m.fitBounds(bounds, { padding, maxZoom: f.zoom ?? 16.5, duration: 900, bearing: 0, pitch: 0 });
     // bottomPad is read at focus time only; the camera shouldn't chase the sheet mid-drag.
-  }, [focus?.key]);
+  }, [focus?.key, angle]);
 
   return (
     <>
       <div ref={el} className="map-bg" />
       {interactive && (
         <div className="map-controls">
+          {focus?.bearing != null && (
+            <button aria-label={angle === "tee" ? "Tee view (tap for north up)" : "North up (tap for tee view)"} aria-pressed={angle === "tee"}
+              onClick={flipAngle}>
+              {angle === "tee" ? (
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
+                  <path d="M12 3 4.5 21h15L12 3z" /><path d="M12 8v6" /><path d="M9.5 18h5" />
+                </svg>
+              ) : (
+                <span className="map-north" aria-hidden>N</span>
+              )}
+            </button>
+          )}
+          {tools && (
+            <button aria-label="Map tools" aria-expanded={panel} aria-pressed={panel} onClick={() => setPanel(!panel)}>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+                <path d="M12 3 2.5 8 12 13l9.5-5L12 3z" /><path d="m2.5 12 9.5 5 9.5-5" /><path d="m2.5 16 9.5 5 9.5-5" />
+              </svg>
+            </button>
+          )}
           <button aria-label={sat ? "Show map" : "Show satellite"} aria-pressed={sat} onClick={() => setSat(!sat)}>
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />
             </svg>
           </button>
+        </div>
+      )}
+      {interactive && tools && panel && (
+        <div className="map-tools" role="group" aria-label="Map tools">
+          {TOOL_ROWS.map((r) => (
+            <label key={r.key} className="map-tool">
+              <input type="checkbox" checked={opts[r.key]} onChange={() => toggle(r.key)} />
+              <span><b>{r.label}</b><small>{r.sub}</small></span>
+            </label>
+          ))}
         </div>
       )}
     </>

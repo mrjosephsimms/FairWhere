@@ -1,4 +1,4 @@
-// The "People" panel: everyone you're connected with, Find My style. Anyone out on the
+// The "Buddies" panel (People.tsx): everyone you're connected with, Find My style. Anyone out on the
 // course (or about to tee off) is at the top with a pulsing ring; everyone else is
 // greyed out, A to Z. Tap someone with a round to see it (and play their holes).
 import { useState } from "react";
@@ -14,7 +14,7 @@ import { Avatar } from "../components/Avatar";
 import { HoleStrip, PaceChip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
 
-export function People({ data, me, now, rounds, query, onOpen, onAddPeople }: {
+export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPeople }: {
   data: LiveData;
   me: string;
   now: number;
@@ -23,6 +23,8 @@ export function People({ data, me, now, rounds, query, onOpen, onAddPeople }: {
   /** Name / @username filter from the search box ("" = everyone). */
   query: string;
   onOpen: (roundId: string) => void;
+  /** A friend who isn't playing (their page has the alert bell). */
+  onPerson: (id: string) => void;
   onAddPeople: () => void;
 }) {
   const nameOf = (id: string) => data.profiles.get(id)?.display_name || "Golfer";
@@ -48,13 +50,17 @@ export function People({ data, me, now, rounds, query, onOpen, onAddPeople }: {
     const info = r ? roundInfo(r, data.courses.get(r.course_id), now) : null;
     if (!r || !info) {
       return (
-        <div key={id} className="row-btn static idle">
+        <button key={id} className="row-btn idle" onClick={() => onPerson(id)}>
           <Avatar id={id} name={nameOf(id)} photo={p?.avatar_url} />
           <span className="row-main">
             <b>{nameOf(id)}</b>
-            <span className="sub">{p?.username ? `@${p.username}` : "Not on the course"}</span>
+            <span className="sub">
+              {data.spots.some((x) => x.user_id === id)
+                ? `📍 Sharing location · ${ago(Date.parse(data.spots.find((x) => x.user_id === id)!.updated_at), now)}`
+                : p?.username ? `@${p.username}` : "Not on the course"}
+            </span>
           </span>
-        </div>
+        </button>
       );
     }
     const { est, label, seq } = info;
@@ -103,9 +109,9 @@ export function People({ data, me, now, rounds, query, onOpen, onAddPeople }: {
       {rest.length > 0 && <div className="rows">{rest.map((id) => row(id, false))}</div>}
       {!friendIds.length && (
         <div className="empty">
-          <b>No one here yet</b>
-          <span>Add the people you golf with (or wait for) to see which hole they're on.</span>
-          <button className="btn" onClick={onAddPeople}>Add people</button>
+          <b>No buddies yet</b>
+          <span>Add your golf buddies (or whoever you're waiting on) to see which hole they're on.</span>
+          <button className="btn" onClick={onAddPeople}>Add buddies</button>
         </div>
       )}
       {friendIds.length > 0 && !people.length && <p className="empty">No one matches “{query}”.</p>}
@@ -130,7 +136,7 @@ export function RoundDetail({ round, data, me, now, onPlay }: { round: Round; da
       <p className="sub mode-line"><ModeIcon mode={round.mode} size={16} /> {label}</p>
       <div className="stats">
         <div className="stat">
-          <span className="label">{est.phase === "pre" ? "Tee time" : est.phase === "done" ? "Last hole" : "On hole"}</span>
+          <span className="label">{est.phase === "pre" ? "Tee time" : est.phase === "done" ? "Last hole" : "Hole"}</span>
           {est.phase === "pre" ? <b>{fmtTime(Date.parse(round.tee_time))}</b> : <b>{round.hole}<small>/18</small></b>}
           {est.phase === "live" && (
             <span className="sub">{toGreen != null ? `~${toGreen} yds to the green` : `Par ${hole.par}${hole.yards ? ` · ${hole.yards} yds` : ""}`}</span>
