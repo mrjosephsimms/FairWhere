@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2fae64"/><stop offset="1" stop-color="#16703b"/></linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#g)"/>
+  <!-- location pin -->
+  <path d="M512 170c-150 0-262 112-262 258 0 190 262 430 262 430s262-240 262-430c0-146-112-258-262-258z" fill="#fff"/>
+  <!-- flagstick + flag inside the pin -->
+  <rect x="482" y="268" width="22" height="290" rx="11" fill="#111813"/>
+  <path d="M504 270 L650 322 L504 374 Z" fill="#d04146"/>
+  <ellipse cx="493" cy="560" rx="70" ry="18" fill="#1f8a4c" opacity=".9"/>
+</svg>

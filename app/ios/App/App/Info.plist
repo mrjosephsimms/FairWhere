@@ -79,6 +79,9 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FairWhere uses your location during a round you choose to share, including with your phone in your pocket, to work out which hole you're on so friends can see your progress and finish time. Sharing stops when the round ends.</string>
+	<!-- HTTPS only (exempt): skips the export-compliance question on every upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

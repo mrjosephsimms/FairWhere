@@ -15,3 +15,6 @@ __pycache__/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# App Review demo login (never commit)
+.review_account

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" fill="#f3f4f1"/>
+  <!-- green question mark whose dot is a golf ball -->
+  <path d="M352 380c0-98 72-170 168-170s168 66 168 154c0 70-40 108-92 142-38 25-60 46-60 98v26" fill="none" stroke="#1c7e45" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- red flag on the top of the hook -->
+  <rect x="660" y="150" width="16" height="190" rx="8" fill="#111813"/>
+  <path d="M676 152 L790 192 L676 232 Z" fill="#d04146"/>
+  <circle cx="536" cy="800" r="64" fill="#fff" stroke="#111813" stroke-width="6"/>
+  <g fill="#cfd5cf"><circle cx="512" cy="782" r="8"/><circle cx="546" cy="776" r="8"/><circle cx="560" cy="806" r="8"/><circle cx="526" cy="812" r="8"/><circle cx="502" cy="810" r="7"/><circle cx="538" cy="836" r="7"/></g>
+</svg>
