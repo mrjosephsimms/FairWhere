@@ -34,11 +34,23 @@ remote migration lists match through `20261005000002`.
 - [ ] No permission prompts or Info.plist strings for hidden features. Location is **When In Use only, never "Always"**.
 
 ## 2. Round location works with the phone in a pocket
-- [ ] Background location **during a live round only**: `@capacitor-community/background-geolocation` with the SaleMap patch-package fix, `UIBackgroundModes: location`, and the blue indicator. About 15 m distance filter, balanced accuracy.
-- [ ] Tracking stops on Finish, auto-finish (leaving the course), Stop sharing, and the 6h stale cutoff.
-- [ ] Writes stay throttled (hole change, else at most every 60–90 s).
-- [ ] Proof: a simulator run on a GPX route for a full Redhawk round, with the screen locked between holes. It auto-advances 1→18 and a second simulator (the friend) sees each hole live.
-- [ ] A field-test debug overlay (distance, candidate hole, fix count) exists behind a dev-only toggle.
+- [x] Background location **during a live round only**: `@capacitor-community/background-geolocation` with the SaleMap patch-package fix, `UIBackgroundModes: location`, and the blue indicator. About 15 m distance filter, balanced accuracy.
+- [x] Tracking stops on Finish, auto-finish (leaving the course), Stop sharing, and the 6h stale cutoff.
+- [x] Writes stay throttled (hole change, else at most every 60–90 s).
+- [x] Proof: a simulator run on a GPX route for a full Redhawk round, with the screen locked between holes. It auto-advances 1→18 and a second simulator (the friend) sees each hole live.
+- [x] A field-test debug overlay (distance, candidate hole, fix count) exists behind a dev-only toggle.
+
+Done 2026-10-07 (PR "Background GPS during a live round"):
+- iPhone Simulator, full Redhawk route (70 waypoints, 8.4 km at 12 m/s). With the screen **locked**, the live
+  `rounds` row (what friends' apps read over Realtime) advanced hole 10→18, each `hole_started_at` a few seconds after
+  reaching the tee; `last_fix_at` only moved on hole changes (throttle holds). Permission prompt offered
+  **While Using** only. After **Stop** (status `cancelled`), moving the simulated location showed no location arrow.
+  The friend side was checked through those live rows rather than a second simulator signed in as a buddy.
+- Finish / auto-finish / 6 h expiry stop tracking the same way Stop does (the round stops being live), but only Stop
+  was exercised.
+- Debug panel (tap "Hole" 5× within 2 s) is built but not yet seen on screen (the simulator's taps are too slow
+  for the 2 s window). Check it on the real-phone field test.
+- Still to do on a real iPhone: a real round at Redhawk with the phone in a pocket; battery use over 4 h.
 
 ## 3. Push notifications
 - [ ] A `device_tokens` table (RLS: owner only, with tests) and APNs registration via `@capacitor/push-notifications`, asked after a short in-app explanation and not at first launch.
