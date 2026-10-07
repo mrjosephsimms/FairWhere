@@ -15,6 +15,7 @@ import { useAction, type LiveData } from "../lib/hooks";
 import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
 import { HoleStrip, PaceChip } from "../components/RoundView";
+import { getCurrentFix, locationAlreadyAllowed } from "../lib/location";
 
 const PACES = [
   [210, "3h 30m"],
@@ -71,8 +72,8 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   // preselect the one they're standing on. (Never prompts just for this.)
   const [here, setHere] = useState<LatLng | null>(null);
   useEffect(() => {
-    navigator.permissions?.query({ name: "geolocation" as PermissionName })
-      .then((p) => (p.state === "granted" ? currentPosition().then(setHere) : null))
+    locationAlreadyAllowed()
+      .then((ok) => (ok ? currentPosition().then(setHere) : null))
       .catch(() => {});
   }, []);
   useEffect(() => {
@@ -414,16 +415,7 @@ function Watchers({ data, golfer }: { data: LiveData; golfer: string }) {
 }
 
 /** One quick GPS reading for the "are you at the course?" check; null if unavailable or refused. */
-function currentPosition(): Promise<LatLng | null> {
-  return new Promise((ok) => {
-    if (!("geolocation" in navigator)) return ok(null);
-    navigator.geolocation.getCurrentPosition(
-      (p) => ok([p.coords.latitude, p.coords.longitude]),
-      () => ok(null),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 },
-    );
-  });
-}
+const currentPosition = (): Promise<LatLng | null> => getCurrentFix().then((f) => (f ? [f.lat, f.lng] : null));
 
 const fmtDistance = (m: number) => (m < 1609 ? `${Math.round(m / 10) * 10} m` : `${Math.round(m / 1609.34)} mi`);
 

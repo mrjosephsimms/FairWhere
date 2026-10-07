@@ -5,24 +5,23 @@
 import { useEffect } from "react";
 import { saveMySpot } from "./db";
 import { distM } from "./holeDetect";
+import { watchLocation } from "./location";
 
 const EVERY_MS = 60000, MOVED_M = 100;
 
 export function usePresenceSharing(active: boolean) {
   useEffect(() => {
-    if (!active || !("geolocation" in navigator)) return;
+    if (!active) return;
     let last: { lat: number; lng: number; t: number } | null = null;
-    const id = navigator.geolocation.watchPosition(
-      (p) => {
-        const { latitude: lat, longitude: lng, accuracy } = p.coords, t = Date.now();
+    return watchLocation(
+      ({ lat, lng, accuracy }) => {
+        const t = Date.now();
         if (accuracy > 200) return;
         if (last && t - last.t < EVERY_MS && distM([last.lat, last.lng], [lat, lng]) < MOVED_M) return;
         last = { lat, lng, t };
         saveMySpot(lat, lng, accuracy).catch(() => (last = null)); // retry on the next fix
       },
       () => {},
-      { enableHighAccuracy: false, maximumAge: 30000, timeout: 30000 },
     );
-    return () => navigator.geolocation.clearWatch(id);
   }, [active]);
 }

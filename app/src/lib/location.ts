@@ -66,7 +66,7 @@ export function watchLocation(
       },
       (loc, err) => {
         if (err) return onError(err.code === "NOT_AUTHORIZED" ? "denied" : "unavailable");
-        if (loc) onFix({ lat: loc.latitude, lng: loc.longitude, accuracy: loc.accuracy, time: loc.time ?? Date.now() });
+        if (loc) (rememberGranted(), onFix({ lat: loc.latitude, lng: loc.longitude, accuracy: loc.accuracy, time: loc.time ?? Date.now() }));
       },
     )
       .then((w) => {
@@ -90,4 +90,57 @@ export function watchLocation(
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 },
   );
   return () => navigator.geolocation.clearWatch(wid);
+}
+
+const GRANTED_KEY = "fairwhere.locationOk";
+const rememberGranted = () => {
+  try {
+    localStorage.setItem(GRANTED_KEY, "1");
+  } catch { /* fine */ }
+};
+
+/**
+ * One quick reading (for "are you at the course?"), or null if refused / unavailable.
+ * Native goes through the plugin too, so iPhone only ever shows FairWhere's own prompt
+ * (the web view's geolocation adds a second "localhost would like your location" one).
+ */
+export function getCurrentFix(timeoutMs = 8000): Promise<Fix | null> {
+  if (Capacitor.isNativePlatform())
+    return new Promise((ok) => {
+      let id: string | null = null, done = false;
+      const finish = (f: Fix | null) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        if (id) Bg.removeWatcher({ id }).catch(() => {});
+        if (f) rememberGranted();
+        ok(f);
+      };
+      const timer = setTimeout(() => finish(null), timeoutMs);
+      Bg.addWatcher({ requestPermissions: true, stale: true, accuracy: "balanced" }, (loc, err) => {
+        if (err) return finish(null);
+        if (loc) finish({ lat: loc.latitude, lng: loc.longitude, accuracy: loc.accuracy, time: loc.time ?? Date.now() });
+      })
+        .then((w) => (done ? Bg.removeWatcher({ id: w }).catch(() => {}) : void (id = w)))
+        .catch(() => finish(null));
+    });
+  return new Promise((ok) => {
+    if (!("geolocation" in navigator)) return ok(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => (rememberGranted(), ok({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, time: p.timestamp || Date.now() })),
+      () => ok(null),
+      { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 120000 },
+    );
+  });
+}
+
+/** True if location was already allowed, so we can use it without causing a permission prompt. */
+export async function locationAlreadyAllowed(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform() && navigator.permissions)
+    return navigator.permissions.query({ name: "geolocation" as PermissionName }).then((p) => p.state === "granted", () => false);
+  try {
+    return localStorage.getItem(GRANTED_KEY) === "1";
+  } catch {
+    return false;
+  }
 }

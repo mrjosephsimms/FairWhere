@@ -15,6 +15,7 @@ describe("yardage", () => {
     expect(originFor(h1, mid)).toEqual({ pt: mid, fromYou: true });
     expect(originFor(h1, [33.6, -117.3]).fromYou).toBe(false);
     expect(originFor(h1, null).pt).toEqual(tee);
+    expect(originFor(h1, green)).toEqual({ pt: green, fromYou: true }); // on the green: ~0, not the tee's distance
   });
   it("front <= middle <= back of the green", () => {
     const y = greenYards(tee, h1);
