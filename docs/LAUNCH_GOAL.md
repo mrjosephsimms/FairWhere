@@ -71,11 +71,26 @@ Done 2026-10-07 (PR "Push notifications for alerts"):
   alert from a buddy's round.
 
 ## 4. Accounts, safety, App Review requirements
-- [ ] Native **Sign in with Apple** (team `8424XCN267`, bundle `com.sunnysimms.fairwhere`) plus the email/phone code. Google stays off unless Sunny asks.
-- [ ] **Delete account** in Me, as Apple guideline 5.1.1(v) requires. It removes the profile, rounds, scores, friendships, watches, notifications, tokens and the photo, with RLS-tested RPCs.
-- [ ] **Block** and **report** a user. Blocking hides both people from each other and cancels pending requests. Reports land in a table Sunny can check.
-- [ ] Privacy policy, terms and support pages hosted at a public URL and linked in the app.
-- [ ] OpenStreetMap attribution shown in About and on the map.
+- [x] Native **Sign in with Apple** (team `8424XCN267`, bundle `com.sunnysimms.fairwhere`) plus the email/phone code. Google stays off unless Sunny asks.
+- [x] **Delete account** in Me, as Apple guideline 5.1.1(v) requires. It removes the profile, rounds, scores, friendships, watches, notifications, tokens and the photo, with RLS-tested RPCs.
+- [x] **Block** and **report** a user. Blocking hides both people from each other and cancels pending requests. Reports land in a table Sunny can check.
+- [x] Privacy policy, terms and support pages hosted at a public URL and linked in the app.
+- [x] OpenStreetMap attribution shown in About and on the map.
+
+Done 2026-10-07 (PR "App Review requirements"):
+- Migration 16 (live): `delete_my_account()` (cascades through every table; the app empties the photo folder first),
+  `blocks` + `block_user()` / `my_blocks()` (you vanish for each other, alerts/shares/requests stop, request says "not
+  found"), `reports` + `report_user()` (snapshot of who/why, optional block). 22 new DB checks.
+- App: Report / Block at the bottom of a buddy's page and round; Blocked list in Edit profile; Delete account + About
+  (Privacy · Terms · Support, credits) on Me; map credits as a top-left ⓘ (the sheet hid the old bottom one).
+- Native Sign in with Apple: `AppleSignInPlugin.swift` (no client secret to renew), Apple provider on in Supabase with
+  the bundle ID; Google button removed (it was never configured). Built, **not yet tried**: needs a real iPhone or a
+  Simulator signed in to an Apple ID.
+- Pages in `site/`, published by `.github/workflows/pages.yml` to https://mrjosephsimms.github.io/FairWhere/
+  (privacy, terms with Apple's zero-tolerance / 24 h report language, support). Contact is **support@fairwhere.app**,
+  which only works once the domain + email forwarding exist.
+- Checked in the Simulator: Me page (Delete account, links, credits) and the map credits. Report/Block and the
+  sign-in screen weren't seen on screen (that test account has no buddies; signing out would need your code).
 
 ## 5. Polish: it feels finished
 - [ ] First-run flow: name and photo → how location is used → notifications → add your first buddy (code, QR, invite link) → start a round. Every step can be skipped and resumed.

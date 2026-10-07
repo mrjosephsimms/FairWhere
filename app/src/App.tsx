@@ -210,6 +210,8 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   const openAdding = () => (closePages(), setAdding(true), setDetent("full"));
   const openPerson = (id: string) => (closePages(), setPerson(id), setDetent("mid"));
+  /** After blocking someone from their page: leave it, they're gone. */
+  const afterBlock = () => (closePages(), setNotice("Blocked. You won't see each other in FairWhere."), data.reload());
 
   // A tapped push: that round if it's still on the map, else the friend's page.
   const [pushTarget, setPushTarget] = useState<PushTarget | null>(null);
@@ -309,11 +311,11 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
         ) : inbox ? (
           <Inbox data={data} onOpen={(id) => rounds.some((r) => r.id === id) && openRound(id)} />
         ) : person ? (
-          <PersonCard data={data} me={me} id={person} onAlerts={() => (setAlertsFor(person), setDetent("full"))} />
+          <PersonCard data={data} me={me} id={person} onAlerts={() => (setAlertsFor(person), setDetent("full"))} onBlocked={afterBlock} />
         ) : adding ? (
           <AddPeople data={data} me={me} incomingCode={invite} onCodeUsed={clearInvite} />
         ) : sel ? (
-          <RoundDetail round={sel} data={data} me={me} now={now} onPlay={setGame} />
+          <RoundDetail round={sel} data={data} me={me} now={now} onPlay={setGame} onBlocked={afterBlock} />
         ) : tab === "people" ? (
           <People data={data} me={me} now={now} rounds={rounds} query={search ?? ""} onOpen={openRound} onPerson={openPerson} onAddPeople={openAdding} />
         ) : tab === "round" ? (

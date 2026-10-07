@@ -6,7 +6,7 @@
 //      which reopens the app; we exchange the PKCE code for a session.
 // The scheme is registered in ios/App/App/Info.plist (CFBundleURLTypes), and
 // fairwhere://auth-callback must be on Supabase's Redirect URLs allowlist.
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Share } from "@capacitor/share";
@@ -19,13 +19,32 @@ export const AUTH_REDIRECT = `${SCHEME}://auth-callback`;
 /** Where email links and OAuth should land. */
 export const authRedirect = () => (isNative ? AUTH_REDIRECT : window.location.origin + window.location.pathname);
 
-export async function signInWithProvider(provider: "apple" | "google") {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider,
-    options: { redirectTo: authRedirect(), skipBrowserRedirect: isNative },
-  });
-  if (!error && isNative && data?.url) await Browser.open({ url: data.url, windowName: "_self" });
-  return { error };
+// Native Sign in with Apple (ios/App/App/AppleSignInPlugin.swift): Apple's Face ID sheet gives an
+// identity token, Supabase checks it (no browser, no client secret to renew).
+const AppleSignIn = registerPlugin<{
+  authorize(o: { nonce: string }): Promise<{ identityToken: string; givenName: string; familyName: string }>;
+}>("AppleSignIn");
+
+const hex = (b: ArrayBuffer | Uint8Array) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, "0")).join("");
+
+/** iPhone only. A cancelled sheet isn't an error. */
+export async function signInWithApple(): Promise<{ error: { message: string } | null }> {
+  // A one-time value tying Apple's token to this request: Apple gets its hash, Supabase the original.
+  const nonce = hex(crypto.getRandomValues(new Uint8Array(32)));
+  const hashed = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(nonce)));
+  let r: { identityToken: string; givenName: string; familyName: string };
+  try {
+    r = await AppleSignIn.authorize({ nonce: hashed });
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    return err.code === "CANCELED" ? { error: null } : { error: { message: err.message || "Sign in with Apple didn't work" } };
+  }
+  const { data, error } = await supabase.auth.signInWithIdToken({ provider: "apple", token: r.identityToken, nonce });
+  if (error) return { error };
+  // Apple only shares the name on the first sign-in: use it instead of the (often hidden) email.
+  const name = [r.givenName, r.familyName].filter(Boolean).join(" ").trim();
+  if (name && data.user) await supabase.from("profiles").update({ display_name: name.slice(0, 40) }).eq("id", data.user.id);
+  return { error: null };
 }
 
 /** Invite link a friend can tap; also accepted as a plain code. */
@@ -163,3 +182,13 @@ export function onResume(fn: () => void): () => void {
     sub?.then((h) => h.remove());
   };
 }
+
+/** Open a web page: Safari view in the iPhone app, a new tab on the web. */
+export function openLink(url: string) {
+  if (isNative) Browser.open({ url }).catch(() => window.open(url, "_blank"));
+  else window.open(url, "_blank", "noopener");
+}
+
+/** Public pages (privacy, terms, support). Hosted from the repo's site/ folder (GitHub Pages) until fairwhere.app exists. */
+export const SITE = "https://mrjosephsimms.github.io/FairWhere";
+export const LINKS = { privacy: `${SITE}/privacy.html`, terms: `${SITE}/terms.html`, support: `${SITE}/support.html` };

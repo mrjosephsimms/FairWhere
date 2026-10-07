@@ -492,3 +492,24 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 /* "Get these on your lock screen?" (alert settings, before iOS asks) */
 .push-offer { display: grid; gap: 6px; }
 .push-offer .note { margin: 0 0 4px; }
+
+/* Report / block, delete account, About (App Review, step 4) */
+.safety-links { display: flex; justify-content: center; gap: 8px; color: var(--muted); font-size: 13px; margin-top: 4px; }
+.safety-links .link { font-size: 13px; color: var(--muted); }
+.safety { display: grid; gap: 10px; }
+.safety textarea { width: 100%; font: inherit; border: 0; border-radius: 12px; padding: 10px 12px; background: #eef0ec; resize: vertical; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.check-row input { width: 20px; height: 20px; accent-color: var(--accent); }
+.link.danger { color: var(--flag); }
+.center-text { text-align: center; }
+.about { display: grid; gap: 4px; padding: 8px 0 4px; }
+.about-links { display: flex; justify-content: center; gap: 8px; color: var(--muted); }
+.about a { color: inherit; }
+
+.btn.apple { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.signin .legal { margin-top: 10px; }
+.signin .legal .link { font-size: inherit; padding: 0; }
+
+/* Map credits (top-left, below the status bar; the sheet covers the bottom). */
+.map-bg .maplibregl-ctrl-top-left { top: env(safe-area-inset-top); }
+.map-bg .maplibregl-ctrl-attrib.maplibregl-compact { margin: 10px 0 0 10px; max-width: calc(100vw - 96px); }

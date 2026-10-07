@@ -31,6 +31,13 @@ otp_length = 6
 [auth.rate_limit]
 email_sent = 30
 
+# Native Sign in with Apple (app/ios/App/App/AppleSignInPlugin.swift): Supabase checks Apple's
+# identity token against the app's bundle ID. No secret needed (that's only for the web flow).
+[auth.external.apple]
+enabled = true
+client_id = "com.sunnysimms.fairwhere"
+secret = ""
+
 # Push sender (supabase/functions/push). Called by the database (pg_net), not by users, and
 # harmless to call: it only delivers alerts that are already due, each at most once.
 [functions.push]

@@ -103,9 +103,16 @@ export function MapView({ pins = [], course, tools, focus, bottomPad = 0, onPin,
       center: DEFAULT_CENTER,
       zoom: 11.5,
       interactive,
-      attributionControl: { compact: true },
+      // Credits sit top-left: the bottom of the map is under the sheet (ODbL needs them visible).
+      attributionControl: false,
       pitchWithRotate: false,
     });
+    m.addControl(new maplibregl.AttributionControl({
+      compact: true,
+      customAttribution: 'Course data © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>',
+    }), "top-left");
+    // Start as the small ⓘ (MapLibre opens compact credits on load); a tap shows them.
+    m.once("load", () => el.current?.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"));
     m.on("style.load", () => (drawCourse(m, courseRef.current), drawToolLines(m, overlayRef.current)));
     // Measure: a tap on the map moves the target there.
     m.on("click", (e) => measureRef.current && setTarget({ hole: holeRef.current, pt: [e.lngLat.lat, e.lngLat.lng] }));

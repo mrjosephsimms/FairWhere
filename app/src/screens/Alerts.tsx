@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { markNotesRead, removeWatch, saveWatch, type Note, type WatchSettings } from "../lib/db";
 import type { LiveData } from "../lib/hooks";
 import { describeNote, isOff, NO_ALERTS } from "../lib/notify";
+import { SafetyActions } from "./Safety";
 import { declinePush, enablePush, pushDeclined, pushPermission, type PushPermission } from "../lib/push";
 import { ago } from "../lib/time";
 import { Avatar } from "../components/Avatar";
@@ -147,7 +148,7 @@ function Switch({ label, hint, on, set }: { label: string; hint: string; on: boo
 }
 
 /** A friend who isn't playing right now. */
-export function PersonCard({ data, me, id, onAlerts }: { data: LiveData; me: string; id: string; onAlerts: () => void }) {
+export function PersonCard({ data, me, id, onAlerts, onBlocked }: { data: LiveData; me: string; id: string; onAlerts: () => void; onBlocked: () => void }) {
   const p = data.profiles.get(id);
   const spot = data.spots.find((s) => s.user_id === id);
   const share = data.shares.find((s) => s.owner_id === id && s.viewer_id === me);
@@ -166,6 +167,7 @@ export function PersonCard({ data, me, id, onAlerts }: { data: LiveData; me: str
         </div>
         <button className="btn" onClick={onAlerts}>{watching ? "🔔 Edit alerts" : "🔔 Get alerts when they play"}</button>
       </section>
+      <SafetyActions target={id} name={p?.display_name || "this golfer"} onBlocked={onBlocked} />
     </div>
   );
 }
