@@ -29,9 +29,16 @@ courses were dropped first, leaving 195 SoCal courses + the 2 originals. Both se
 remote migration lists match through `20261005000002`.
 
 ## 1. v1 scope: flags
-- [ ] `app/src/lib/features.ts` holds the flags `game`, `everydayLocation` and `mapTools`, all `false` for v1, with tests.
-- [ ] None of the three has an entry point in the UI when off; no dead buttons or empty screens.
-- [ ] No permission prompts or Info.plist strings for hidden features. Location is **When In Use only, never "Always"**.
+- [x] `app/src/lib/features.ts` holds the flags `game`, `everydayLocation` and `mapTools`, all `false` for v1, with tests.
+- [x] None of the three has an entry point in the UI when off; no dead buttons or empty screens.
+- [x] No permission prompts or Info.plist strings for hidden features. Location is **When In Use only, never "Always"**.
+
+Done 2026-10-07 (PR "v1 scope: hide the game, everyday sharing and map tools"): `lib/features.ts` (all off, tested,
+plus a test that Info.plist has no "Always" string while everyday sharing is off). Hidden: the Play-a-hole card and hole
+picking on a buddy's round, the Challengers line and Hole game stat; the Location sharing section, sharing pill, spot
+pins and spot lines, and the background sender; the map tools button. The game chunk (three.js, 560 KB) no longer
+ships. `NSLocationAlwaysAndWhenInUseUsageDescription` removed; the privacy page no longer mentions the game.
+Bring one back: flip its flag (everyday sharing also needs the "Always" string back in Info.plist).
 
 ## 2. Round location works with the phone in a pocket
 - [x] Background location **during a live round only**: `@capacitor-community/background-geolocation` with the SaleMap patch-package fix, `UIBackgroundModes: location`, and the blue indicator. About 15 m distance filter, balanced accuracy.

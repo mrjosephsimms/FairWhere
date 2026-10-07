@@ -11,6 +11,7 @@ import { declinePush, enablePush, pushDeclined, pushPermission, type PushPermiss
 import { ago } from "../lib/time";
 import { Avatar } from "../components/Avatar";
 import { untilText } from "./LocationSharing";
+import { features } from "../lib/features";
 
 const nameIn = (data: LiveData, id: string) => data.profiles.get(id)?.display_name || "Golfer";
 
@@ -161,7 +162,7 @@ export function PersonCard({ data, me, id, onAlerts, onBlocked }: { data: LiveDa
           <b>{nameIn(data, id)}</b>
           {p?.username && <span className="sub">@{p.username}</span>}
           <span className="sub">Not on the course right now</span>
-          {share && (
+          {features.everydayLocation && share && (
             <span className="spot-line">📍 Sharing their location with you {untilText(share.expires_at)}{spot ? ` · updated ${ago(Date.parse(spot.updated_at), Date.now())}` : " · no update yet"}</span>
           )}
         </div>

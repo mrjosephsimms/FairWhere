@@ -14,6 +14,7 @@ import { Avatar } from "../components/Avatar";
 import { HoleStrip, PaceChip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
 import { SafetyActions } from "./Safety";
+import { features } from "../lib/features";
 
 export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPeople }: {
   data: LiveData;
@@ -56,7 +57,7 @@ export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPe
           <span className="row-main">
             <b>{nameOf(id)}</b>
             <span className="sub">
-              {data.spots.some((x) => x.user_id === id)
+              {features.everydayLocation && data.spots.some((x) => x.user_id === id)
                 ? `📍 Sharing location · ${ago(Date.parse(data.spots.find((x) => x.user_id === id)!.updated_at), now)}`
                 : p?.username ? `@${p.username}` : "Not on the course"}
             </span>
@@ -122,7 +123,7 @@ export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPe
 
 /** One golfer's round, shown in the sheet while the map zooms to their course. */
 export function RoundDetail({ round, data, me, now, onPlay, onBlocked }: {
-  round: Round; data: LiveData; me: string; now: number; onPlay: (hole: number) => void; onBlocked: () => void;
+  round: Round; data: LiveData; me: string; now: number; onPlay?: (hole: number) => void; onBlocked: () => void;
 }) {
   const [pick, setPick] = useState<number | null>(null);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
@@ -164,8 +165,8 @@ export function RoundDetail({ round, data, me, now, onPlay, onBlocked }: {
           <span className="score-total"><b>{fmtToPar(card.toPar)}</b> · {card.strokes} thru {card.thru}</span>
         </div>
       )}
-      <HoleStrip round={round} now={now} scores={card.thru ? scores : undefined} pars={pars} selected={pick ?? undefined} onSelect={setPick} />
-      {pick ? (
+      <HoleStrip round={round} now={now} scores={card.thru ? scores : undefined} pars={pars} selected={pick ?? undefined} onSelect={onPlay ? setPick : undefined} />
+      {!onPlay ? null : pick ? (
         <div className="play-card">
           <div>
             <b>Hole {pick}</b> · Par {pars[pick - 1]}{seq[pick - 1].yards ? ` · ${seq[pick - 1].yards} yds` : ""}
