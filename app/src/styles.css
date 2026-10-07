@@ -3,13 +3,13 @@
   --bg: #f3f4f1;            /* sheet / grouped background */
   --surface: #ffffff;       /* cards, rows */
   --ink: #111813;
-  --muted: #6c746e;
-  --faint: #9aa19c;
+  --muted: #68706a;         /* AA (4.5:1) on white and --bg */
+  --faint: #6a6f6b;
   --line: rgba(17, 24, 19, .09);
-  --accent: #1f8a4c;        /* fairway green */
+  --accent: #1c7e45;        /* fairway green (AA with white text) */
   --accent-soft: #e2f3e8;
-  --flag: #e5484d;          /* current hole */
-  --good: #1f8a4c; --warn: #c27a12; --bad: #d93a3f;
+  --flag: #d04146;          /* current hole (AA with white text) */
+  --good: #1c7e45; --warn: #99600e; --bad: #d04146;
   --shadow: 0 10px 30px rgba(16, 24, 18, .16), 0 2px 6px rgba(16, 24, 18, .08);
   --tabbar: calc(64px + env(safe-area-inset-bottom));
   --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
@@ -513,3 +513,8 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 /* Map credits (top-left, below the status bar; the sheet covers the bottom). */
 .map-bg .maplibregl-ctrl-top-left { top: env(safe-area-inset-top); }
 .map-bg .maplibregl-ctrl-attrib.maplibregl-compact { margin: 10px 0 0 10px; max-width: calc(100vw - 96px); }
+
+/* Stats: the last tile fills a short last row (no hole in the grid). */
+.stat-grid > :last-child:nth-child(3n + 2) { grid-column: span 2; }
+.stat-grid > :last-child:nth-child(3n + 1) { grid-column: span 3; }
+.toast.offline { background: #2b332d; color: #fff; }

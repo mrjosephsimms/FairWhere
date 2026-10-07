@@ -20,12 +20,14 @@ export function matchCourses<C extends Named>(courses: C[], query: string): C[] 
   });
 }
 
-export function CourseSearch({ courses, value, onChange, here }: {
+export function CourseSearch({ courses, value, onChange, here, ariaLabel }: {
   courses: CourseSummary[];
   value: string;
   onChange: (id: string) => void;
   /** Where the phone is, if known: sorts nearest first. */
   here: LatLng | null;
+  /** When it isn't inside a <label> (Edit profile). */
+  ariaLabel?: string;
 }) {
   const selected = courses.find((c) => c.id === value);
   const [open, setOpen] = useState(false);
@@ -74,7 +76,7 @@ export function CourseSearch({ courses, value, onChange, here }: {
           if (e.key === "Enter" && list[0]) (e.preventDefault(), pick(list[0].id));
           if (e.key === "Escape") setOpen(false);
         }}
-        role="combobox" aria-expanded={open} aria-autocomplete="list" aria-controls="course-options"
+        role="combobox" aria-label={ariaLabel} aria-expanded={open} aria-autocomplete="list" aria-controls="course-options"
         autoComplete="off" autoCorrect="off" spellCheck={false}
       />
       {open && (

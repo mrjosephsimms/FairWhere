@@ -97,9 +97,10 @@ export function AddPeople({ data, me, incomingCode, onCodeUsed }: {
                 <b>Remove {nameOf(other(f))}?</b>
                 <span className="note">You'll stop seeing each other's rounds.</span>
                 <div className="actions">
-                  <button className="btn flag" disabled={busy} onClick={() => run(() => removeFriendship(f)).then(() => setConfirmRemove(null))}>Remove</button>
+                  <button className="btn flag" disabled={busy} onClick={() => run(() => removeFriendship(f)).then((ok) => ok && setConfirmRemove(null))}>Remove</button>
                   <button className="btn ghost" onClick={() => setConfirmRemove(null)}>Cancel</button>
                 </div>
+                {err && <span className="note err" role="alert">{err}</span>}
               </div>
             )}
           </div>
@@ -121,7 +122,7 @@ function ShareYours({ code, name, username, onMsg }: { code: string; name: strin
   const link = addLink(code);
   useEffect(() => {
     if (view !== "qr") return;
-    QRCode.toDataURL(link, { width: 480, margin: 1, color: { dark: "#14321f", light: "#ffffff" } }).then(setQr).catch(() => setQr(null));
+    QRCode.toDataURL(link, { width: 480, margin: 1, color: { dark: "#14321f", light: "#ffffff" } }).then(setQr).catch(() => setQr("failed"));
   }, [view, link]);
   // When the phone's own share sheet isn't available (plain-http pages), show our menu.
   const [menu, setMenu] = useState<{ text: string; url: string } | null>(null);
@@ -143,7 +144,9 @@ function ShareYours({ code, name, username, onMsg }: { code: string; name: strin
         </div>
       ) : (
         <div className="qr">
-          {qr ? <img src={qr} alt={`QR code to add ${name}`} width={200} height={200} /> : <div className="qr-wait" />}
+          {qr === "failed" ? (
+            <p className="note">Couldn't make a QR code. Use your code above instead.</p>
+          ) : qr ? <img src={qr} alt={`QR code to add ${name}`} width={200} height={200} /> : <div className="qr-wait" aria-label="Making your QR code" />}
           <span className="note">Scan with any phone camera to add {username ? `@${username}` : "you"}.</span>
         </div>
       )}

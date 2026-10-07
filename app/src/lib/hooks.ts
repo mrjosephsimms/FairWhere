@@ -7,6 +7,7 @@ import {
   getCourses, getPlaysFor, getProfiles, getScoresFor, listFriendships, listNotes, listShares, listSpots, listVisibleRounds, listWatches,
   type Friendship, type GamePlay, type LocationShare, type Note, type Profile, type Round, type Spot, type Watch,
 } from "./db";
+import { friendlyError } from "./errors";
 
 export function useSession() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -101,7 +102,7 @@ export function useLiveData(me: string): LiveData {
         error: null,
       });
     } catch (e) {
-      setState((s) => ({ ...s, loaded: true, error: e instanceof Error ? e.message : String(e) }));
+      setState((s) => ({ ...s, loaded: true, error: friendlyError(e, "Couldn't refresh. Pull down or wait a moment.") }));
     }
   }, [me]);
 
@@ -124,10 +125,12 @@ export function useLiveData(me: string): LiveData {
       .on("postgres_changes", { event: "*", schema: "public", table: "locations" }, reload)
       .subscribe();
     const offResume = onResume(reload);
+    window.addEventListener("online", reload); // back from a dead zone: catch up now
     const poll = setInterval(load, 90000);
     return () => {
       supabase.removeChannel(channel);
       offResume();
+      window.removeEventListener("online", reload);
       clearInterval(poll);
       clearTimeout(timer.current);
     };
@@ -140,14 +143,17 @@ export function useLiveData(me: string): LiveData {
 export function useAction(onDone?: () => void) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const run = async (fn: () => Promise<unknown>) => {
+  /** Resolves true on success, false on failure (the error is in `err`). */
+  const run = async (fn: () => Promise<unknown>): Promise<boolean> => {
     setBusy(true);
     setErr(null);
     try {
       await fn();
       onDone?.();
+      return true;
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Couldn't save that. Check your connection and try again.");
+      setErr(friendlyError(e, "Couldn't save that. Check your connection and try again."));
+      return false;
     } finally {
       setBusy(false);
     }
