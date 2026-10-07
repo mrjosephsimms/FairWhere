@@ -490,4 +490,57 @@ set role authenticated;
 select pg_temp.fails($$select public.delete_my_account()$$, 'deleting needs a signed-in user');
 reset role;
 
+-- Step 6: rate limits, photo cap, job-log upkeep.
+reset role;
+select pg_temp.ok((select file_size_limit = 2097152 and allowed_mime_types = array['image/jpeg'] from storage.buckets where id = 'avatars'),
+  'profile photos capped at 2 MB, JPEG only');
+insert into cron.job_run_details (end_time) values (now() - interval '8 days'), (now() - interval '1 day');
+select public.trim_job_logs();
+select pg_temp.ok((select count(*) = 1 from cron.job_run_details), 'job logs older than a week are trimmed');
+-- 20 requests in an hour from C: the 21st is refused (with a readable message).
+insert into auth.users (id, email) select ('00000000-0000-0000-0001-' || lpad(g::text, 12, '0'))::uuid, 'spam' || g || '@example.com' from generate_series(1, 21) g;
+insert into public.friendships (user_id, friend_id, created_at)
+  select '00000000-0000-0000-0000-00000000000c', ('00000000-0000-0000-0001-' || lpad(g::text, 12, '0'))::uuid, now() - interval '10 minutes' from generate_series(1, 20) g;
+select set_config('test.code21', (select friend_code from public.profiles where id = '00000000-0000-0000-0001-000000000021'), false);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+set role authenticated;
+do $$ begin
+  perform public.request_friend(current_setting('test.code21'));
+  raise exception 'FAIL: 21st request in an hour went through';
+exception when others then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  if sqlerrm not like '%a lot of requests%' then raise exception 'FAIL: wrong error: %', sqlerrm; end if;
+  raise notice 'ok   friend requests limited (20 an hour)';
+end $$;
+reset role;
+update public.friendships set created_at = now() - interval '2 hours' where user_id = '00000000-0000-0000-0000-00000000000c';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+set role authenticated;
+select pg_temp.ok(public.request_friend(current_setting('test.code21')) = 'pending',
+  'the hourly limit resets');
+reset role;
+-- Reports: one per person per day, at most 10 a day.
+insert into public.friendships (user_id, friend_id, status) values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000d', 'accepted') on conflict do nothing;
+delete from public.reports;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+select public.report_user('00000000-0000-0000-0000-00000000000d', 'spam');
+select public.report_user('00000000-0000-0000-0000-00000000000d', 'spam', 'again');
+reset role;
+select pg_temp.ok((select count(*) = 1 from public.reports), 'a repeat report of the same person the same day is not stored twice');
+insert into public.reports (reporter_id, reported_id, reason) select '00000000-0000-0000-0000-00000000000a', null, 'other' from generate_series(1, 9);
+delete from public.friendships where least(user_id, friend_id) = '00000000-0000-0000-0000-00000000000a' and greatest(user_id, friend_id) = '00000000-0000-0000-0000-00000000000c';
+insert into public.friendships (user_id, friend_id, status) values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000c', 'accepted');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+do $$ begin
+  perform public.report_user('00000000-0000-0000-0000-00000000000c', 'spam');
+  raise exception 'FAIL: 11th report in a day went through';
+exception when others then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  if sqlerrm not like '%a lot of reports%' then raise exception 'FAIL: wrong error: %', sqlerrm; end if;
+  raise notice 'ok   reports limited (10 a day)';
+end $$;
+reset role;
+
 \warn 'All RLS tests passed.'

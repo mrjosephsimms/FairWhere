@@ -73,7 +73,12 @@ Until then the `push` function answers "APNs key not configured" and leaves aler
 Before the first device build: Xcode → App target → Signing & Capabilities should show **Push Notifications**
 (the entitlement is in `ios/App/App/App.entitlements`; automatic signing registers it on the App ID).
 
-## Before App Review: support email + reports
+## Before App Review: Supabase Pro, sign-in email, support email + reports
+
+- **Upgrade FairWhere's Supabase project to Pro** (decided 2026-10-07): dashboard → project uvyeenrkkvvsizszdizv →
+  Billing. Daily backups, no pausing.
+- **Sign-in emails** go through Gmail SMTP, capped at 30/hour project-wide (Gmail allows ~500/day). Move to Resend
+  (as Yard Sale Club did) before launch, then raise `[auth.rate_limit] email_sent`.
 
 - **support@fairwhere.app must work** (it's on the privacy/terms/support pages): buy fairwhere.app, then e.g.
   Cloudflare Email Routing → your Gmail. Then point the pages at the domain if you like (`site/`, `app/src/lib/native.ts` SITE).
