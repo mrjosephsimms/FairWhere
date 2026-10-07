@@ -62,6 +62,17 @@ phone login on (it reads `/auth/v1/settings`). To turn it on:
    (secret via `env(...)`) in `supabase/config.toml` BEFORE the next `supabase config push`,
    or the push turns phone login back off.
 
+## Push notifications — turn on delivery (one command)
+
+Everything is built and live except Apple's key. APNs keys are per Apple team, so the Yard Sale Club key
+(`AuthKey_C3GRBNTY2J.p8`, team `8424XCN267`) works for FairWhere too. With the `.p8` file's path:
+
+    ~/bin/supabase secrets set APNS_KEY_ID=C3GRBNTY2J APNS_TEAM_ID=8424XCN267 APNS_KEY="$(cat /path/to/AuthKey_C3GRBNTY2J.p8)"
+
+Until then the `push` function answers "APNs key not configured" and leaves alerts in the app only.
+Before the first device build: Xcode → App target → Signing & Capabilities should show **Push Notifications**
+(the entitlement is in `ios/App/App/App.entitlements`; automatic signing registers it on the App ID).
+
 ## Location (2026-10-04)
 - Built: everyday location sharing (off by default, owner grants per person with an expiry), "not at a golf
   course" check on Start a Round, auto-finish when the golfer leaves the course (client 10 min / 3 km rule +

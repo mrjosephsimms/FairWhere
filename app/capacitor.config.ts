@@ -7,6 +7,10 @@ const config: CapacitorConfig = {
   webDir: "dist",
   // Mirror JS console output into the Xcode log so white screens are debuggable.
   loggingBehavior: "debug",
+  plugins: {
+    // While the app is open the in-app alert banner shows new alerts, so no iOS banner on top of it.
+    PushNotifications: { presentationOptions: [] },
+  },
 };
 
 export default config;

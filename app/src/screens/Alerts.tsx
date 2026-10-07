@@ -1,11 +1,12 @@
 // Alerts: the bell on someone's page (what you want to hear about their rounds),
 // a simple page for friends who aren't playing, your notifications list, and the
 // banner that drops in when a new alert arrives. Alerts are made on the server
-// (migration 12); iPhone push will deliver the same ones later.
+// (migration 12); the `push` Edge Function also sends them to iPhones (lib/push.ts).
 import { useEffect, useRef, useState } from "react";
 import { markNotesRead, removeWatch, saveWatch, type Note, type WatchSettings } from "../lib/db";
 import type { LiveData } from "../lib/hooks";
 import { describeNote, isOff, NO_ALERTS } from "../lib/notify";
+import { declinePush, enablePush, pushDeclined, pushPermission, type PushPermission } from "../lib/push";
 import { ago } from "../lib/time";
 import { Avatar } from "../components/Avatar";
 import { untilText } from "./LocationSharing";
@@ -30,6 +31,7 @@ export function AlertSettings({ data, me, golferId }: { data: LiveData; me: stri
   return (
     <div className="list alerts">
       <p className="note">Alerts about {name}'s rounds. You'll get these every time they play. {name} can see that you get updates.</p>
+      {!isOff(w) && <PushOffer name={name} />}
 
       <section className="card">
         <span className="label">Hole updates</span>
@@ -79,6 +81,58 @@ export function AlertSettings({ data, me, golferId }: { data: LiveData; me: stri
         <Switch label="Ball hunt 🔎" hint="When they've been searching for a ball a few minutes" on={w.ball_hunt} set={(v) => update({ ...w, ball_hunt: v })} />
       </section>
       {err && <p className="note err" role="alert">{err}</p>}
+    </div>
+  );
+}
+
+/**
+ * The phone's notification permission, explained before iOS asks (LAUNCH_GOAL step 3):
+ * shown once someone has turned an alert on, never at first launch.
+ */
+function PushOffer({ name }: { name: string }) {
+  const [perm, setPerm] = useState<PushPermission | null>(null);
+  const [hidden, setHidden] = useState(pushDeclined);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => void pushPermission().then(setPerm).catch(() => setPerm("unsupported")), []);
+  if (perm === "denied")
+    return <p className="note">Notifications are off for FairWhere. To get these on your lock screen, turn them on in iPhone Settings › FairWhere › Notifications.</p>;
+  if (perm !== "prompt" || hidden) return null;
+  return (
+    <section className="card push-offer">
+      <b>🔔 Get these on your lock screen?</b>
+      <p className="note">FairWhere can send a notification for {name}'s alerts, even when the app is closed. Nothing else.</p>
+      <div className="actions">
+        <button className="btn" disabled={busy} onClick={async () => {
+          setBusy(true);
+          setPerm(await enablePush().catch(() => "denied" as const));
+          setBusy(false);
+        }}>Turn on notifications</button>
+        <button className="btn ghost" onClick={() => (declinePush(), setHidden(true))}>Not now</button>
+      </div>
+    </section>
+  );
+}
+
+/** Edit profile: the same permission, any time (e.g. after "Not now"). Hidden on the web. */
+export function PushSetting() {
+  const [perm, setPerm] = useState<PushPermission | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => void pushPermission().then(setPerm).catch(() => setPerm("unsupported")), []);
+  if (!perm || perm === "unsupported") return null;
+  return (
+    <div className="f push-setting">
+      Lock-screen alerts
+      {perm === "granted" ? (
+        <span className="note">On. Alerts you set on a buddy's bell also arrive as notifications.</span>
+      ) : perm === "denied" ? (
+        <span className="note">Off in iPhone Settings › FairWhere › Notifications.</span>
+      ) : (
+        <button className="btn ghost" disabled={busy} onClick={async () => {
+          setBusy(true);
+          setPerm(await enablePush().catch(() => "denied" as const));
+          setBusy(false);
+        }}>Turn on notifications</button>
+      )}
     </div>
   );
 }

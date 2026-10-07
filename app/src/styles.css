@@ -488,3 +488,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
   background: #111813; color: #c8f7d4; font: 12px/1.45 var(--mono); }
 .gps-debug dt { color: #7fbf8f; }
 .gps-debug dd { margin: 0; }
+
+/* "Get these on your lock screen?" (alert settings, before iOS asks) */
+.push-offer { display: grid; gap: 6px; }
+.push-offer .note { margin: 0 0 4px; }

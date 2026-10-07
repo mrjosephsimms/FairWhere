@@ -22,7 +22,7 @@ PSQL=(psql -h "$TMP" -p "$PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 -q -X
 "${PSQL[@]}" -f "$ROOT/supabase/tests/supabase_stub.sql"
 for f in "$ROOT"/supabase/migrations/*.sql; do
   echo "migrate  $(basename "$f")"
-  grep -v 'create extension if not exists pg_cron' "$f" | "${PSQL[@]}" >/dev/null
+  grep -vE 'create extension if not exists pg_(cron|net)' "$f" | "${PSQL[@]}" >/dev/null
 done
 echo "test     rls.sql"
 "${PSQL[@]}" -f "$ROOT/supabase/tests/rls.sql" 2>&1 >/dev/null | sed -E "s/^psql:[^ ]+ NOTICE:  //"

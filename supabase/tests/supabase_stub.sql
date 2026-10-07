@@ -44,3 +44,9 @@ alter table storage.objects enable row level security;
 grant usage on schema storage to anon, authenticated;
 grant all on storage.objects to authenticated;
 
+
+-- pg_net isn't installed locally either: record the calls so tests can see the push nudge.
+create schema net;
+create table net.calls (url text, body jsonb, at timestamptz default now());
+create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000)
+returns bigint language sql as $$ insert into net.calls (url, body) values (url, body); select 1::bigint $$;
