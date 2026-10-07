@@ -18,10 +18,15 @@ Progress evidence goes in `docs/LAUNCH_AUDIT.md`: one row per item below, with s
   A Sunny-only blocker is a pause, never a reason to give up.
 
 ## 0. Land the open work
-- [ ] Review, fix and merge PR #4 (rename, alerts, everyday sharing, QR invites, course search), PR #5 (SoCal courses) and PR #6 (design references).
-- [ ] PR #5 deletes ~73k lines of `data/courses.json`: confirm that's intended (data moved to the region import), and that Redhawk + Temecula Creek Inn still seed and play correctly.
-- [ ] Every migration is applied to the hosted project (`uvyeenrkkvvsizszdizv`) and `supabase migration list` shows no drift.
+- [x] Review, fix and merge PR #4 (rename, alerts, everyday sharing, QR invites, course search), PR #5 (SoCal courses) and PR #6 (design references).
+- [x] PR #5 deletes ~73k lines of `data/courses.json`: confirm that's intended (data moved to the region import), and that Redhawk + Temecula Creek Inn still seed and play correctly.
+- [x] Every migration is applied to the hosted project (`uvyeenrkkvvsizszdizv`) and `supabase migration list` shows no drift.
 - [ ] `NEXT_STEPS.md` and `README.md` describe FairWhere as it actually is.
+
+Done 2026-10-07: #4, #5, #6, #7 squash-merged. #5's ~73k deleted lines are only `courses.json` going from
+indented to one-course-per-line (Redhawk + Temecula Creek data verified identical); 47 likely-private
+courses were dropped first, leaving 195 SoCal courses + the 2 originals. Both seeds applied live; local and
+remote migration lists match through `20261005000002`.
 
 ## 1. v1 scope: flags
 - [ ] `app/src/lib/features.ts` holds the flags `game`, `everydayLocation` and `mapTools`, all `false` for v1, with tests.
