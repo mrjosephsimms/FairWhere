@@ -11,6 +11,8 @@ multipolygon relations contribute their closed outer ways.
 Then: node scripts/gen_course_seed.mjs supabase/migrations/<new>.sql
 """
 import json, pathlib, sys, urllib.request
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from osm_http import write_courses  # noqa: E402
 
 UA = {"User-Agent": "fairwhere/0.1 (course features import)"}
 PAD = 0.0025  # ~250 m around the holes
@@ -56,7 +58,7 @@ def main():
         feats["trees"] = [[round(x["lat"], 6), round(x["lon"], 6)] for x in nodes.values() if x.get("tags", {}).get("natural") == "tree"]
         c["features"] = feats
         print(f"{c['id']}: " + ", ".join(f"{len(v)} {k}" for k, v in feats.items()))
-    path.write_text(json.dumps(db, indent=1))
+    write_courses(path, db)
 
 if __name__ == "__main__":
     main()

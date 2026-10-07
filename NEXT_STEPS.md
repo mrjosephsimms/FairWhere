@@ -43,6 +43,13 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   plus a Google OAuth client. Email sign-in works without them.
 - Open product questions from `docs/handoff/HANDOFF.md` §8 (spectator links, showing scores).
 
+## Southern California courses (PR "Southern California public courses (OSM)")
+- 242 OSM-mapped public SoCal courses added to `data/courses.json` by `scripts/import_region.py`; seed in
+  `supabase/migrations/20261005000001/2_seed_socal_courses.sql`. **Not applied to the live project yet.**
+- Before applying: decide on the "unsure access" country clubs / military courses and rename the placeholder
+  course/nine names listed in the PR. The course picker already loads only
+  `id, name, address, nines` + a center point and fetches `data` on pick (PR #4).
+
 ## Phone sign-in (text a code) — built, switched off
 
 The sign-in screen shows an Email | Phone toggle by itself once the Supabase project has

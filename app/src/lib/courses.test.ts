@@ -28,7 +28,34 @@ describe("playSequence", () => {
     for (const c of courses) {
       for (const h of c.holes) {
         expect(h.centerline.length, `${c.id} ${h.ref}`).toBeGreaterThanOrEqual(2);
-        expect([3, 4, 5]).toContain(h.par);
+        expect([3, 4, 5, 6], `${c.id} ${h.ref}`).toContain(h.par);
+        expect(Number.isInteger(h.number), `${c.id} ${h.ref}`).toBe(true);
+      }
+    }
+  });
+
+  it("every course in data/courses.json plays as 18 holes (every pair of nines on 27/36-hole courses)", () => {
+    const ids = new Set<string>();
+    expect(courses.length).toBeGreaterThanOrEqual(2);
+    for (const c of courses) {
+      expect(ids.has(c.id), `duplicate id ${c.id}`).toBe(false);
+      ids.add(c.id);
+      const orders = c.nines
+        ? c.nines.flatMap((a) => c.nines!.filter((b) => b !== a).map((b) => [a, b]))
+        : [null];
+      if (c.nines) {
+        expect(c.nines.length, c.id).toBeGreaterThanOrEqual(2);
+        for (const n of c.nines) {
+          expect(c.holes.filter((h) => h.nine === n).map((h) => h.number).sort((x, y) => x - y), `${c.id} ${n}`)
+            .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        }
+        expect(c.holes.every((h) => h.nine && c.nines!.includes(h.nine)), c.id).toBe(true);
+      } else {
+        expect(c.holes.map((h) => h.number).sort((x, y) => x - y), c.id).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
+      }
+      for (const order of orders) {
+        const seq = playSequence(c, order);
+        expect(seq.map((h) => h.n), `${c.id} ${order}`).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
       }
     }
   });
