@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { endRound, getCourses, getScores, listCourses, setHole, setScore, startRound, type CourseSummary, type Round } from "../lib/db";
 import { fmtToPar, summarize } from "../lib/score";
 import { isOff, summarizeWatch } from "../lib/notify";
@@ -15,6 +15,7 @@ import { useAction, type LiveData } from "../lib/hooks";
 import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
 import { HoleStrip, PaceChip } from "../components/RoundView";
+import { getCurrentFix, locationAlreadyAllowed } from "../lib/location";
 
 const PACES = [
   [210, "3h 30m"],
@@ -71,8 +72,8 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   // preselect the one they're standing on. (Never prompts just for this.)
   const [here, setHere] = useState<LatLng | null>(null);
   useEffect(() => {
-    navigator.permissions?.query({ name: "geolocation" as PermissionName })
-      .then((p) => (p.state === "granted" ? currentPosition().then(setHere) : null))
+    locationAlreadyAllowed()
+      .then((ok) => (ok ? currentPosition().then(setHere) : null))
       .catch(() => {});
   }, []);
   useEffect(() => {
@@ -228,6 +229,7 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 
 function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; now: number; gps: GpsState }) {
   const { busy, err, run } = useAction(data.reload);
+  const [debugOn, tapDebug] = useGpsDebugToggle();
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <div className="card empty">Loading course…</div>;
   const { est, hole, label, seq } = info;
@@ -243,7 +245,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
 
       <div className="stats">
         <div className="stat">
-          <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "Hole"}</span>
+          <span className="label" onClick={tapDebug}>{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "Hole"}</span>
           <b>{round.hole}<small>/18</small></b>
           <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>
         </div>
@@ -259,6 +261,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
           <span>{Math.round(gps.pos.frac * 100)}% of the hole · {toYards(gps.pos.fromTeeM)} yds from the tee</span>
         </div>
       )}
+      {debugOn && <GpsDebugPanel gps={gps} now={now} />}
       {gps.searchingSince && <p className="hunt">🔎 Ball hunt? {fmtDur(now - gps.searchingSince)} in this spot. Your friends can see it.</p>}
       <p className="note finish">Finish around <b>{fmtTime(est.eta)}</b></p>
       <div className="stepper">
@@ -330,6 +333,45 @@ function ScoreCard({ round, now, pars, data }: { round: Round; now: number; pars
   );
 }
 
+const DEBUG_KEY = "fairwhere.gpsDebug";
+
+/** Hidden field-test panel (tap "Hole" 5 times): is GPS arriving, and what does the detector think? */
+function useGpsDebugToggle() {
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem(DEBUG_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const taps = useRef<number[]>([]);
+  const tap = () => {
+    const t = Date.now();
+    taps.current = [...taps.current.filter((x) => t - x < 2000), t];
+    if (taps.current.length < 5) return;
+    taps.current = [];
+    setOn(!on);
+    try {
+      localStorage.setItem(DEBUG_KEY, on ? "0" : "1");
+    } catch { /* not remembered */ }
+  };
+  return [on, tap] as const;
+}
+
+function GpsDebugPanel({ gps, now }: { gps: GpsState; now: number }) {
+  const d = gps.debug;
+  const age = gps.fix ? Math.round((now - gps.fix.t) / 1000) : null;
+  return (
+    <dl className="gps-debug" aria-label="GPS debug">
+      <dt>GPS</dt><dd>{gps.status}{gps.fix ? ` · ±${Math.round(gps.fix.acc)} m · ${age}s ago` : ""}</dd>
+      <dt>Fixes</dt><dd>{d.fixes} used · {d.skipped} too vague</dd>
+      <dt>Detector</dt><dd>{d.candidate != null ? `hole ${d.candidate} · ${Math.round(d.d ?? 0)} m from line` : "off the course"}</dd>
+      <dt>Writes</dt><dd>{d.writes}</dd>
+      {gps.fix && <><dt>Fix</dt><dd>{gps.fix.pt[0].toFixed(5)}, {gps.fix.pt[1].toFixed(5)}</dd></>}
+    </dl>
+  );
+}
+
 function gpsLine(gps: GpsState): string {
   if (gps.status === "asking") return "Finding you…";
   if (gps.status === "denied") return "Location is off; use the buttons";
@@ -373,16 +415,7 @@ function Watchers({ data, golfer }: { data: LiveData; golfer: string }) {
 }
 
 /** One quick GPS reading for the "are you at the course?" check; null if unavailable or refused. */
-function currentPosition(): Promise<LatLng | null> {
-  return new Promise((ok) => {
-    if (!("geolocation" in navigator)) return ok(null);
-    navigator.geolocation.getCurrentPosition(
-      (p) => ok([p.coords.latitude, p.coords.longitude]),
-      () => ok(null),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 },
-    );
-  });
-}
+const currentPosition = (): Promise<LatLng | null> => getCurrentFix().then((f) => (f ? [f.lat, f.lng] : null));
 
 const fmtDistance = (m: number) => (m < 1609 ? `${Math.round(m / 10) * 10} m` : `${Math.round(m / 1609.34)} mi`);
 

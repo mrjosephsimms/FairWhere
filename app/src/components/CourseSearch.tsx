@@ -50,7 +50,17 @@ export function CourseSearch({ courses, value, onChange, here }: {
     return () => document.removeEventListener("pointerdown", away);
   }, [open]);
 
-  const pick = (id: string) => (onChange(id), setOpen(false), setQuery(""));
+  // Choose, then drop the keyboard ourselves (see the option buttons' onMouseDown). On iPhone the
+  // keyboard closing slides the form down so the input lands under the finger and the tap's
+  // trailing events focus it again; ignore a refocus right after a pick.
+  const pickedAt = useRef(0);
+  const pick = (id: string) => {
+    pickedAt.current = Date.now();
+    onChange(id);
+    setOpen(false);
+    setQuery("");
+    (document.activeElement as HTMLElement | null)?.blur();
+  };
   const miles = (m: number) => (!isFinite(m) ? "" : m < 1609 ? "here" : `${(m / 1609.34).toFixed(m < 16093 ? 1 : 0)} mi`);
 
   return (
@@ -58,7 +68,7 @@ export function CourseSearch({ courses, value, onChange, here }: {
       <input
         value={open ? query : selected?.name ?? ""}
         placeholder={open ? "Type a course name or town" : "Choose a course"}
-        onFocus={() => (setOpen(true), setQuery(""))}
+        onFocus={(e) => (Date.now() - pickedAt.current < 600 ? e.currentTarget.blur() : (setOpen(true), setQuery("")))}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && list[0]) (e.preventDefault(), pick(list[0].id));
@@ -71,7 +81,9 @@ export function CourseSearch({ courses, value, onChange, here }: {
         <ul className="course-options" id="course-options" role="listbox">
           {list.map((c) => (
             <li key={c.id} role="option" aria-selected={c.id === value}>
-              <button type="button" onClick={() => pick(c.id)}>
+              {/* Keep focus in the input on press: on iPhone, losing it first starts the keyboard
+                  closing, the sheet jumps, and the tap lands on nothing. */}
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(c.id)}>
                 <span className="row-main">
                   <b>{c.name}</b>
                   <span className="sub">{[town(c), c.nines ? `${c.nines.length * 9} holes` : null].filter(Boolean).join(" · ")}</span>

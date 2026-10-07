@@ -32,7 +32,7 @@ const centroid = (ring: LatLng[]): LatLng => [
 
 /** Where yardages are measured from: you (if you're on this hole) or the tee. */
 export function originFor(h: PlayHole, gps: LatLng | null): { pt: LatLng; fromYou: boolean } {
-  if (gps && nearestOnLine(h.centerline, gps).d <= ON_HOLE_M && distM(gps, green(h)) > 8) return { pt: gps, fromYou: true };
+  if (gps && nearestOnLine(h.centerline, gps).d <= ON_HOLE_M) return { pt: gps, fromYou: true };
   return { pt: h.centerline[0], fromYou: false };
 }
 

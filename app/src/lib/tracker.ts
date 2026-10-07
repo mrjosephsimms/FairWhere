@@ -1,12 +1,15 @@
-// Live GPS for your own round (Milestone 3, foreground). Runs only while you have a
-// live round (HANDOFF §6): watches position, auto-advances the hole, works out
-// yardage, spots ball hunts, and writes to the round sparingly (HANDOFF §4).
+// Live GPS for your own round. Runs only while you have a live round (HANDOFF §6), and
+// in the iPhone app keeps running with the phone locked in a pocket (lib/location.ts):
+// watches position, auto-advances the hole, works out yardage, spots ball hunts, and
+// writes to the round sparingly (HANDOFF §4). Stops the moment the round isn't live
+// (finished, auto-finished on leaving, stopped, or expired after 6 h).
 import { useEffect, useRef, useState } from "react";
 import type { LatLng, PlayHole } from "./courses";
 import { endRound, updateRoundPosition, type Round } from "./db";
 import { makeHoleTracker, nearestOnLine } from "./holeDetect";
 import { makeLeaveDetector } from "./leaveCourse";
 import { locateOnHole, makeSearchDetector, type HolePosition } from "./onCourse";
+import { watchLocation } from "./location";
 
 /** Write at most this often unless the hole or ball-hunt state changes. */
 export const WRITE_EVERY_MS = 60000;
@@ -19,9 +22,22 @@ export interface GpsState {
   /** Where you are on the hole you're playing; null when off the course. */
   pos: HolePosition | null;
   searchingSince: number | null;
+  /** Field-test numbers for the hidden GPS debug panel (MyRound: tap "Hole" 5 times). */
+  debug: GpsDebug;
 }
 
-const OFF: GpsState = { status: "off", fix: null, pos: null, searchingSince: null };
+export interface GpsDebug {
+  /** Fixes used / ignored as too vague, and position writes sent this session. */
+  fixes: number;
+  skipped: number;
+  writes: number;
+  /** What the hole detector currently thinks, and metres from that hole's line (or the next tee). */
+  candidate: number | null;
+  d: number | null;
+}
+
+const NO_DEBUG: GpsDebug = { fixes: 0, skipped: 0, writes: 0, candidate: null, d: null };
+const OFF: GpsState = { status: "off", fix: null, pos: null, searchingSince: null, debug: NO_DEBUG };
 
 /**
  * `onLeft` fires if the golfer clearly leaves the course without finishing (the round
@@ -41,7 +57,6 @@ export function useRoundTracker(round: Round | undefined, seq: PlayHole[] | unde
 
   useEffect(() => {
     if (!roundId || !seq) return setState(OFF);
-    if (!("geolocation" in navigator)) return setState({ ...OFF, status: "unavailable" });
     setState({ ...OFF, status: "asking" });
 
     const lines = seq.map((h) => h.centerline);
@@ -49,13 +64,15 @@ export function useRoundTracker(round: Round | undefined, seq: PlayHole[] | unde
     // Riders park the cart on the path while they play, so give them longer.
     const hunt = makeSearchDetector({ minMs: (riding ? 4 : 3) * 60000 });
     let lastWrite = 0, lastSearching: number | null = null, writing = false, ended = false;
+    const dbg: GpsDebug = { ...NO_DEBUG };
     const fromCourse = (pt: LatLng) => Math.min(...lines.map((l) => nearestOnLine(l, pt).d));
     const left = makeLeaveDetector({}, lastFix.current != null && fromCourse(lastFix.current) <= 200);
 
-    const id = navigator.geolocation.watchPosition(
+    const stop = watchLocation(
       (p) => {
-        if (p.coords.accuracy > MAX_ACCURACY_M) return;
-        const pt: LatLng = [p.coords.latitude, p.coords.longitude], t = p.timestamp || Date.now();
+        if (p.accuracy > MAX_ACCURACY_M) return void dbg.skipped++;
+        dbg.fixes++;
+        const pt: LatLng = [p.lat, p.lng], t = p.time;
         if (ended) return;
         // Forgot to finish and went home: finish it for them (stops sharing, wipes location).
         if (left(fromCourse(pt), t)) {
@@ -67,13 +84,16 @@ export function useRoundTracker(round: Round | undefined, seq: PlayHole[] | unde
         const now = r.offCourse ? hole.current : r.hole;
         const pos = r.offCourse ? null : locateOnHole(seq[now - 1], pt);
         const searchingSince = hunt(pt, t, pos);
-        setState({ status: "on", fix: { pt, acc: p.coords.accuracy, t }, pos, searchingSince });
+        dbg.candidate = r.offCourse ? null : r.hole;
+        dbg.d = r.offCourse ? null : r.d;
+        setState({ status: "on", fix: { pt, acc: p.accuracy, t }, pos, searchingSince, debug: { ...dbg } });
 
         const huntChanged = (searchingSince == null) !== (lastSearching == null);
         if (writing || (!r.change && !huntChanged && t - lastWrite < WRITE_EVERY_MS)) return;
         writing = true;
         lastWrite = t;
         lastSearching = searchingSince;
+        dbg.writes++;
         if (r.change) hole.current = now;
         updateRoundPosition(roundId, {
           last_lat: pt[0], last_lng: pt[1], last_fix_at: new Date(t).toISOString(),
@@ -84,10 +104,10 @@ export function useRoundTracker(round: Round | undefined, seq: PlayHole[] | unde
           .catch(() => (lastWrite = 0)) // retry on the next fix
           .finally(() => (writing = false));
       },
-      (e) => setState({ ...OFF, status: e.code === e.PERMISSION_DENIED ? "denied" : "unavailable" }),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 },
+      (e) => setState({ ...OFF, status: e }),
+      { background: true },
     );
-    return () => navigator.geolocation.clearWatch(id);
+    return stop;
   }, [roundId, seq, riding]);
 
   return state;
