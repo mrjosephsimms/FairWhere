@@ -1,4 +1,6 @@
-# Find My Golfer
+# FairWhere
+
+*Where's he at, and when's he done?* (formerly "Find My Golfer"; the repo keeps that name.)
 
 "Find My Friends" for golf. Share a live round and friends see **which hole you're on, when you teed off, and when you'll likely finish**, without texting "where are you?"
 
@@ -27,13 +29,13 @@ Matches Yardsale Club's app shell, minus its Python backend:
 
 1. **Supabase**: create a new project (e.g. `find-my-golfer`). Don't reuse SaleMap's project.
    - Apply the migrations, in order: `supabase db push --db-url "<connection string>"`, or paste each file from `supabase/migrations/` into the SQL editor.
-   - **Auth → URL Configuration → Redirect URLs**: add `findmygolfer://auth-callback` and `http://localhost:5180`.
+   - **Auth → URL Configuration → Redirect URLs**: add `fairwhere://auth-callback` and `http://localhost:5180`.
    - **Auth → Email Templates → Magic Link**: add `{{ .Token }}` so the email also carries a 6-digit code.
 2. **`app/.env`** (copy `app/.env.example`):
    - `VITE_SUPABASE_URL`: Project Settings → API → Project URL
    - `VITE_SUPABASE_PUBLISHABLE_KEY`: Project Settings → API → publishable key
 3. **Sign in with Apple** (Apple Developer team `8424XCN267`):
-   - Register App ID `com.sunnysimms.findmygolfer` with Sign in with Apple. This bundle ID is a placeholder; change it in `app/capacitor.config.ts` and the Xcode project **before** registering, because it can't be renamed afterwards.
+   - Register App ID `com.sunnysimms.fairwhere` with Sign in with Apple (final; it can't change once registered).
    - Create a Services ID and a Sign in with Apple key. Enable the Apple provider in Supabase with the client secret JWT. Same recipe as Yardsale Club's `NOTES.md` → "Sign in with Apple"; the secret expires every 6 months.
 4. **Google sign-in** (optional): OAuth client in Google Cloud Console, then enable the Google provider in Supabase.
 

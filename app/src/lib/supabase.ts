@@ -14,3 +14,14 @@ export const supabase = createClient(url || "http://localhost:54321", key || "mi
     flowType: "pkce",
   },
 });
+
+/** Whether the project has phone (text code) sign-in turned on, which needs an SMS provider. */
+export async function phoneSignInEnabled(): Promise<boolean> {
+  if (!url || !key) return false;
+  try {
+    const r = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key } });
+    return Boolean((await r.json())?.external?.phone);
+  } catch {
+    return false;
+  }
+}

@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import type { CourseData } from "../lib/courses";
-import { endRound, getScores, listCourses, setHole, setScore, startRound, type Round } from "../lib/db";
+import { endRound, getCourses, getScores, listCourses, setHole, setScore, startRound, type CourseSummary, type Round } from "../lib/db";
 import { fmtToPar, summarize } from "../lib/score";
+import { isOff, summarizeWatch } from "../lib/notify";
 import { DEFAULT_TARGET, type Mode } from "../lib/pace";
 import { ModeIcon } from "../components/ModeIcon";
 import { toYards } from "../lib/onCourse";
+import { AWAY_FROM_COURSE_M, metresFromCourse } from "../lib/leaveCourse";
+import { CourseSearch } from "../components/CourseSearch";
+import type { LatLng } from "../lib/courses";
+import { distM } from "../lib/holeDetect";
 import type { GpsState } from "../lib/tracker";
 import { fmtDur } from "../lib/time";
 import { useAction, type LiveData } from "../lib/hooks";
 import { roundInfo } from "../lib/roundInfo";
 import { fmtTime, nextTeeSlot, teeTimeFromInput, toTimeInput } from "../lib/time";
-import { HoleStrip, PaceChip, StopConfirm } from "../components/RoundView";
+import { HoleStrip, PaceChip } from "../components/RoundView";
 
 const PACES = [
   [210, "3h 30m"],
@@ -39,7 +43,7 @@ export function MyRound({ data, me, now, gps }: { data: LiveData; me: string; no
 }
 
 function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
-  const [courses, setCourses] = useState<CourseData[] | null>(null);
+  const [courses, setCourses] = useState<CourseSummary[] | null>(null);
   const [courseId, setCourseId] = useState("");
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
@@ -56,10 +60,30 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
     listCourses()
       .then((cs) => {
         setCourses(cs);
-        if (cs[0]) setCourseId(cs[0].id);
+        // Home course first (Edit profile), else the first one; standing at a course overrides below.
+        const home = data.profiles.get(me)?.home_course_id;
+        setCourseId(cs.find((c) => c.id === home)?.id ?? cs[0]?.id ?? "");
       })
       .catch((e) => setLoadErr(e.message));
   }, []);
+
+  // If the phone has already allowed location, sort courses nearest-first and
+  // preselect the one they're standing on. (Never prompts just for this.)
+  const [here, setHere] = useState<LatLng | null>(null);
+  useEffect(() => {
+    navigator.permissions?.query({ name: "geolocation" as PermissionName })
+      .then((p) => (p.state === "granted" ? currentPosition().then(setHere) : null))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    const near = here && courses?.filter((c) => c.spot).sort((a, b) => distM(a.spot!, here) - distM(b.spot!, here))[0];
+    if (!here || !near) return;
+    // Rough pick by the course's middle, then check properly against its holes.
+    getCourses([near.id]).then((m) => {
+      const full = m.get(near.id);
+      if (full && metresFromCourse(full, here) < AWAY_FROM_COURSE_M) setCourseId(near.id);
+    }).catch(() => {});
+  }, [here, courses]);
 
   const course = courses?.find((c) => c.id === courseId);
   useEffect(() => {
@@ -82,9 +106,22 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
   const ninesBad = Boolean(course?.nines && front === back);
   const selectedEmpty = visibility === "selected" && viewers.size === 0;
 
-  function submit(e: FormEvent) {
+  const [checking, setChecking] = useState(false);
+  const [away, setAway] = useState<number | null>(null); // metres from the course, when they seem not to be there
+
+  async function submit(e: FormEvent, anyway = false) {
     e.preventDefault();
     if (!course || ninesBad || selectedEmpty) return;
+    if (!anyway) {
+      // Not at the course? Ask first (they may be sharing ahead of a later tee time).
+      setChecking(true);
+      const here = await currentPosition();
+      setChecking(false);
+      const full = here ? (await getCourses([course.id]).catch(() => null))?.get(course.id) : null;
+      const m = here && full ? metresFromCourse(full, here) : 0;
+      if (m > AWAY_FROM_COURSE_M) return setAway(m);
+    }
+    setAway(null);
     run(() =>
       startRound({
         course_id: course.id,
@@ -103,23 +140,9 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 
   return (
     <form className="card" onSubmit={submit}>
-      <div className="segmented" role="radiogroup" aria-label="Walking or riding">
-        {MODES.map(([m, label]) => (
-          <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => {
-            setModeState(m);
-            if (!paceTouched) setTarget(DEFAULT_TARGET[m]); // follow the mode until they pick a pace
-          }}>
-            <ModeIcon mode={m} /> {label}
-          </button>
-        ))}
-      </div>
       <label className="f">
         Course
-        <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}{c.nines ? ` (${c.nines.length * 9} holes)` : ""}</option>
-          ))}
-        </select>
+        <CourseSearch courses={courses} value={courseId} onChange={setCourseId} here={here} />
       </label>
       {course?.nines && (
         <div className="two">
@@ -150,6 +173,16 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
           </select>
         </label>
       </div>
+      <div className="segmented" role="radiogroup" aria-label="Walking or riding">
+        {MODES.map(([m, label]) => (
+          <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => {
+            setModeState(m);
+            if (!paceTouched) setTarget(DEFAULT_TARGET[m]); // follow the mode until they pick a pace
+          }}>
+            <ModeIcon mode={m} /> {label}
+          </button>
+        ))}
+      </div>
       <fieldset className="f">
         <legend>Who can see it</legend>
         <div className="seg">
@@ -175,7 +208,18 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
             <p className="note">You haven't added any friends yet.</p>
           ))}
       </fieldset>
-      <button className="btn" disabled={busy || ninesBad || selectedEmpty}>Start sharing my round</button>
+      {away != null ? (
+        <div className="confirm" role="alertdialog" aria-label="Not at a golf course?">
+          <b>Hey, it doesn't look like you're at a golf course.</b>
+          <span className="note">You're about {fmtDistance(away)} from {course?.name}. Start sharing your round anyway?</span>
+          <div className="actions">
+            <button type="button" className="btn" disabled={busy} onClick={(e) => submit(e, true)}>Start anyway</button>
+            <button type="button" className="btn ghost" onClick={() => setAway(null)}>Not yet</button>
+          </div>
+        </div>
+      ) : (
+        <button className="btn" disabled={busy || checking || ninesBad || selectedEmpty}>{checking ? "Checking where you are…" : "Start sharing my round"}</button>
+      )}
       <p className="note">Friends see your hole, tee time and estimated finish. Sharing stops when you finish.</p>
       {err && <p className="note err" role="alert">{err}</p>}
     </form>
@@ -183,7 +227,6 @@ function StartRoundForm({ data, me }: { data: LiveData; me: string }) {
 }
 
 function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; now: number; gps: GpsState }) {
-  const [confirmStop, setConfirmStop] = useState(false);
   const { busy, err, run } = useAction(data.reload);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <div className="card empty">Loading course…</div>;
@@ -200,7 +243,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
 
       <div className="stats">
         <div className="stat">
-          <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "On hole"}</span>
+          <span className="label">{est.phase === "pre" ? `Tees off ${fmtTime(Date.parse(round.tee_time))}` : "Hole"}</span>
           <b>{round.hole}<small>/18</small></b>
           <span className="sub">Par {hole.par}{hole.yards ? ` · ${hole.yards} yds` : ""}</span>
         </div>
@@ -217,7 +260,7 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
         </div>
       )}
       {gps.searchingSince && <p className="hunt">🔎 Ball hunt? {fmtDur(now - gps.searchingSince)} in this spot. Your friends can see it.</p>}
-      <p className="note">Finish around <b>{fmtTime(est.eta)}</b></p>
+      <p className="note finish">Finish around <b>{fmtTime(est.eta)}</b></p>
       <div className="stepper">
         <button className="btn ghost" aria-label="Back one hole" disabled={busy || round.hole <= 1} onClick={() => go(round.hole - 1)}>−</button>
         {round.hole < 18 ? (
@@ -229,15 +272,13 @@ function LiveRound({ round, data, now, gps }: { round: Round; data: LiveData; no
       </div>
     </div>
     <ScoreCard round={round} now={now} pars={seq.map((h) => h.par)} data={data} />
+    <Watchers data={data} golfer={round.user_id} />
     <div className="list">
-      <div className="actions">
-        {round.hole < 18 && (
-          <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish early</button>
-        )}
-        <button className="btn ghost" onClick={() => setConfirmStop(true)}>Stop sharing</button>
-      </div>
-      {confirmStop && (
-        <StopConfirm busy={busy} onYes={() => run(() => endRound(round.id, "cancelled"))} onNo={() => setConfirmStop(false)} />
+      {/* Stopping without finishing lives on the "Sharing live" chip up top; on 18 the main button finishes. */}
+      {round.hole < 18 && (
+        <div className="actions">
+          <button className="btn ghost" disabled={busy} onClick={() => run(() => endRound(round.id, "done"))}>Finish round</button>
+        </div>
       )}
       {err && <p className="note err" role="alert">{err}</p>}
     </div>
@@ -314,3 +355,34 @@ function Challengers({ round, scores, data }: { round: Round; scores: Map<number
     </p>
   );
 }
+
+/** Who gets alerts about your rounds (shown so sharing is never a surprise). */
+function Watchers({ data, golfer }: { data: LiveData; golfer: string }) {
+  const watchers = data.watches.filter((w) => w.golfer_id === golfer && !isOff(w));
+  if (!watchers.length) return null;
+  return (
+    <section className="card watchers">
+      <span className="label">🔔 Getting updates</span>
+      {watchers.map((w) => (
+        <p key={w.watcher_id} className="note">
+          <b>{data.profiles.get(w.watcher_id)?.display_name || "A friend"}</b>: {summarizeWatch(w)}
+        </p>
+      ))}
+    </section>
+  );
+}
+
+/** One quick GPS reading for the "are you at the course?" check; null if unavailable or refused. */
+function currentPosition(): Promise<LatLng | null> {
+  return new Promise((ok) => {
+    if (!("geolocation" in navigator)) return ok(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => ok([p.coords.latitude, p.coords.longitude]),
+      () => ok(null),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 },
+    );
+  });
+}
+
+const fmtDistance = (m: number) => (m < 1609 ? `${Math.round(m / 10) * 10} m` : `${Math.round(m / 1609.34)} mi`);
+

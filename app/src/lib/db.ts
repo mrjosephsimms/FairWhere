@@ -1,7 +1,7 @@
 // Typed data access. Every read is filtered by RLS on the server
 // (supabase/migrations/20261003000001_init.sql); nothing here is a security boundary.
 import { supabase } from "./supabase";
-import type { CourseData, CourseFeatures } from "./courses";
+import type { CourseData, CourseFeatures, LatLng } from "./courses";
 import type { Mode } from "./pace";
 
 export interface Profile {
@@ -11,6 +11,8 @@ export interface Profile {
   /** Unique @handle (without the @); null until they pick one. */
   username: string | null;
   avatar_url: string | null;
+  /** The course they call home (set in Edit profile). */
+  home_course_id: string | null;
 }
 
 export interface Friendship {
@@ -52,7 +54,7 @@ function check<T>(res: { data: T | null; error: { message: string } | null }): T
 
 export async function getProfiles(ids: string[]): Promise<Profile[]> {
   if (!ids.length) return [];
-  return check(await supabase.from("profiles").select("id, display_name, friend_code, username, avatar_url").in("id", ids));
+  return check(await supabase.from("profiles").select("id, display_name, friend_code, username, avatar_url, home_course_id").in("id", ids));
 }
 
 export async function setDisplayName(id: string, name: string) {
@@ -68,6 +70,10 @@ export async function setUsername(id: string, username: string) {
   const res = await supabase.from("profiles").update({ username: u }).eq("id", id);
   if (res.error?.code === "23505") throw new Error(`@${u} is taken. Try another.`);
   check(res);
+}
+
+export async function setHomeCourse(id: string, courseId: string | null) {
+  check(await supabase.from("profiles").update({ home_course_id: courseId }).eq("id", id));
 }
 
 /** Upload a profile photo (already resized to a small JPEG) and point the profile at it. */
@@ -103,11 +109,25 @@ export async function removeFriendship(f: Pick<Friendship, "user_id" | "friend_i
 
 const courseCache = new Map<string, CourseData>();
 
-export async function listCourses(): Promise<CourseData[]> {
-  const rows = check(await supabase.from("courses").select("data").order("name"));
-  const list = (rows as { data: CourseData }[]).map((r) => r.data);
-  list.forEach((c) => courseCache.set(c.id, c));
-  return list;
+/** What the course pickers need. Hole maps are big, so they load (getCourses) once a course is picked. */
+export interface CourseSummary {
+  id: string;
+  name: string;
+  address: string | null;
+  nines: string[] | null;
+  /** Roughly the middle of the course (a few tees averaged), for nearest-first sorting. */
+  spot: LatLng | null;
+}
+
+export async function listCourses(): Promise<CourseSummary[]> {
+  const rows = check(await supabase.from("courses")
+    .select("id,name,address,nines,t0:data->holes->0->centerline->0,t3:data->holes->3->centerline->0,t12:data->holes->12->centerline->0")
+    .order("name"));
+  return (rows as unknown as (Omit<CourseSummary, "spot"> & Record<string, LatLng | null>)[]).map(({ t0, t3, t12, ...c }) => {
+    const pts = [t0, t3, t12].filter((p): p is LatLng => Array.isArray(p));
+    const spot = pts.length ? ([pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length] as LatLng) : null;
+    return { id: c.id, name: c.name, address: c.address, nines: c.nines, spot };
+  });
 }
 
 export async function getCourses(ids: string[]): Promise<Map<string, CourseData>> {
@@ -254,6 +274,100 @@ export async function getMyHistory(me: string): Promise<{ rounds: Round[]; score
     supabase.from("game_plays").select("*").eq("player_id", me).then((res) => check(res) as GamePlay[]),
   ]);
   return { rounds, scores, plays };
+}
+
+// ------------------------------------------------------------------ alerts
+
+/** What `watcher_id` wants to hear about `golfer_id`'s rounds (saved for all future rounds). */
+export interface Watch {
+  watcher_id: string;
+  golfer_id: string;
+  every_hole: boolean;
+  holes: number[];
+  before_finish_min: 15 | 30 | 45 | 60 | null;
+  tee_off: boolean;
+  finished: boolean;
+  ball_hunt: boolean;
+}
+
+export type WatchSettings = Omit<Watch, "watcher_id" | "golfer_id">;
+
+/** An alert sent to you (created on the server; see migration 12). */
+export interface Note {
+  id: string;
+  user_id: string;
+  golfer_id: string;
+  round_id: string;
+  kind: "hole" | "soon" | "tee_off" | "finished" | "ball_hunt";
+  hole: number | null;
+  eta: string | null;
+  delta_min: number | null;
+  strokes: number | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+/** Your watches, plus anyone watching you (so you can see who gets updates). */
+export async function listWatches(): Promise<Watch[]> {
+  return check(await supabase.from("watches").select("*"));
+}
+
+export async function saveWatch(golferId: string, w: WatchSettings) {
+  check(await supabase.from("watches").upsert({ golfer_id: golferId, ...w, updated_at: new Date().toISOString() }));
+}
+
+export async function removeWatch(me: string, golferId: string) {
+  check(await supabase.from("watches").delete().eq("watcher_id", me).eq("golfer_id", golferId));
+}
+
+export async function listNotes(): Promise<Note[]> {
+  return check(await supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(60));
+}
+
+export async function markNotesRead(ids: string[]) {
+  if (ids.length) check(await supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids));
+}
+
+// ------------------------------------------------------------------ everyday location sharing
+
+/** `owner_id` lets `viewer_id` see their everyday location until `expires_at` (null = until turned off). */
+export interface LocationShare {
+  owner_id: string;
+  viewer_id: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
+/** Someone's latest everyday position (visible only while they share it with you). */
+export interface Spot {
+  user_id: string;
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  updated_at: string;
+}
+
+/** Shares you've given and ones given to you (expired ones are left out). */
+export async function listShares(): Promise<LocationShare[]> {
+  const rows: LocationShare[] = check(await supabase.from("location_shares").select("*"));
+  return rows.filter((s) => !s.expires_at || Date.parse(s.expires_at) > Date.now());
+}
+
+export async function shareLocation(viewerId: string, expiresAt: Date | null) {
+  check(await supabase.from("location_shares").upsert({ viewer_id: viewerId, expires_at: expiresAt?.toISOString() ?? null }));
+}
+
+/** Owner stops sharing, or viewer stops seeing. */
+export async function endShare(ownerId: string, viewerId: string) {
+  check(await supabase.from("location_shares").delete().eq("owner_id", ownerId).eq("viewer_id", viewerId));
+}
+
+export async function listSpots(): Promise<Spot[]> {
+  return check(await supabase.from("locations").select("*"));
+}
+
+export async function saveMySpot(lat: number, lng: number, accuracy: number) {
+  check(await supabase.from("locations").upsert({ lat, lng, accuracy, updated_at: new Date().toISOString() }));
 }
 
 /** Finish (shows "Finished hh:mm" to friends for 4h) or stop sharing (disappears). */

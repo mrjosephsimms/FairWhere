@@ -1,20 +1,22 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { supabaseConfigured } from "./lib/supabase";
-import { initDeepLinks } from "./lib/native";
+import { initDeepLinks, takePendingAdd } from "./lib/native";
 import { useAction, useLiveData, useNow, useSession } from "./lib/hooks";
 import { endRound } from "./lib/db";
 import { roundInfo, visibleRounds } from "./lib/roundInfo";
-import { courseBounds, roundPosition } from "./lib/geo";
+import { bearingDeg, courseBounds, roundPosition } from "./lib/geo";
 import { playSequence } from "./lib/courses";
 import { useRoundTracker } from "./lib/tracker";
+import { usePresenceSharing } from "./lib/presence";
 import { StopConfirm } from "./components/RoundView";
 import { MapView, type CourseOverlay, type MapFocus, type MapPin } from "./components/MapView";
 import { Sheet, type Detent } from "./components/Sheet";
 import { SignIn } from "./screens/SignIn";
 import { People, RoundDetail } from "./screens/People";
 import { MyRound } from "./screens/MyRound";
-import { Me } from "./screens/Me";
+import { EditProfile, Me } from "./screens/Me";
 import { AddPeople } from "./screens/AddPeople";
+import { AlertSettings, Inbox, NoteBanner, PersonCard } from "./screens/Alerts";
 
 type Tab = "people" | "round" | "me";
 
@@ -22,6 +24,7 @@ type Tab = "people" | "round" | "me";
 const HoleGame = lazy(() => import("./game3d/HoleGame"));
 // Dev-only playground (?demo=game&hole=N); import.meta.env.DEV strips it from builds.
 const Demo = import.meta.env.DEV ? lazy(() => import("./game3d/Demo")) : null;
+const MapDemo = import.meta.env.DEV ? lazy(() => import("./components/MapDemo")) : null; // ?demo=map&hole=N&at=0.4
 
 export default function App() {
   const session = useSession();
@@ -30,9 +33,18 @@ export default function App() {
   const clearInvite = useCallback(() => setInvite(null), []);
 
   useEffect(() => initDeepLinks(setInvite), []);
+  // An add-me link opened before signing in: pick it up once they're in.
+  useEffect(() => {
+    if (session) {
+      const code = takePendingAdd();
+      if (code) setInvite(code);
+    }
+  }, [session]);
 
   if (Demo && new URLSearchParams(location.search).get("demo") === "game")
     return <Suspense fallback={<div className="hg-loading">Loading the course…</div>}><Demo /></Suspense>;
+  if (MapDemo && new URLSearchParams(location.search).get("demo") === "map")
+    return <Suspense fallback={null}><MapDemo /></Suspense>;
 
   if (!supabaseConfigured)
     return (
@@ -62,8 +74,12 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   const [sheetPx, setSheetPx] = useState(0);
   const [recenter, setRecenter] = useState(0);
   const [game, setGame] = useState<number | null>(null); // hole being played on the selected round
-  const [adding, setAdding] = useState(false); // the "Add people" sheet (the + on People)
+  const [adding, setAdding] = useState(false); // the "Add buddies" sheet (the + on Buddies)
   const [search, setSearch] = useState<string | null>(null); // People search box (null = closed)
+  const [person, setPerson] = useState<string | null>(null); // a friend's page when they aren't playing
+  const [alertsFor, setAlertsFor] = useState<string | null>(null); // the bell: alert settings for this friend
+  const [inbox, setInbox] = useState(false); // your alerts list
+  const [editing, setEditing] = useState(false); // Edit profile
 
   const rounds = useMemo(() => visibleRounds(data.rounds, now), [data.rounds, now]);
   const live = data.rounds.find((r) => r.user_id === me && r.status === "live");
@@ -81,7 +97,18 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       return undefined;
     }
   }, [liveCourse, liveNines]);
-  const gps = useRoundTracker(live, liveSeq);
+  const sharingWith = data.shares.filter((s) => s.owner_id === me);
+  usePresenceSharing(sharingWith.length > 0);
+  const [notice, setNotice] = useState<string | null>(null);
+  const gps = useRoundTracker(live, liveSeq, () => {
+    setNotice("Looks like you left the course, so we finished your round and stopped sharing.");
+    data.reload();
+  });
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   useEffect(() => {
     if (invite) (setTab("people"), setSelected(null), setAdding(true), setDetent("full"));
@@ -115,6 +142,15 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
       }),
     [rounds, data.courses, data.profiles, now, me, selected, live?.id, gps.fix],
   );
+  // Friends sharing their everyday location with you (unless they're on the course, where their round pin shows).
+  const spotPins: MapPin[] = useMemo(
+    () =>
+      data.spots
+        .filter((s) => s.user_id !== me && !rounds.some((r) => r.user_id === s.user_id && r.status === "live"))
+        .map((s) => ({ id: `spot-${s.user_id}`, lat: s.lat, lng: s.lng, name: data.profiles.get(s.user_id)?.display_name || "Golfer",
+          photo: data.profiles.get(s.user_id)?.avatar_url, selected: person === s.user_id })),
+    [data.spots, data.profiles, rounds, me, person],
+  );
 
   // The course on the map: whoever's selected, else your own live round on the Round tab.
   const focusRound = sel ?? (tab === "round" ? live : undefined);
@@ -123,13 +159,24 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     return info ? { seq: info.seq, current: focusRound!.status === "live" ? focusRound!.hole : 0, finished: focusRound!.status !== "live" } : null;
   }, [focusRound, data.courses, now]);
 
+  // Hole tools (yardage, measure...) for whoever's round is on the map; GPS only for your own.
+  const toolHole = course && !course.finished ? course.seq.find((h) => h.n === course.current) : undefined;
+  const tools = useMemo(
+    () => (toolHole && focusRound ? { hole: toolHole, courseId: focusRound.course_id, gps: focusRound.id === live?.id ? gps.fix?.pt ?? null : null } : null),
+    [toolHole?.ref, toolHole?.n, focusRound?.course_id, focusRound?.id, live?.id, gps.fix?.pt[0], gps.fix?.pt[1]],
+  );
+
   const focus: MapFocus = (() => {
     const key = `${tab}|${focusRound?.id ?? ""}|${data.loaded}|${pins.length > 0}|${course ? 1 : 0}|${recenter}`;
-    // Live: frame the hole they're on. Otherwise the whole course.
+    // Live: frame the hole they're on (and fly to the next one when it changes). Otherwise the whole course.
     if (course) {
       const on = course.seq.find((h) => h.n === course.current); // by number: a game overlay holds just one hole
-      return { key, bounds: courseBounds(on ? [on] : course.seq) };
+      if (!on) return { key, bounds: courseBounds(course.seq) };
+      const green = on.green?.center ?? on.centerline[on.centerline.length - 1];
+      return { key: `${key}|h${on.n}`, bounds: courseBounds([on]), zoom: 18, bearing: bearingDeg(on.centerline[0], green), line: [on.centerline[0], green] };
     }
+    const spot = person ? data.spots.find((s) => s.user_id === person) : undefined;
+    if (spot) return { key: `${key}|spot-${person}`, center: [spot.lng, spot.lat], zoom: 15 };
     if (pins.length === 1) return { key, center: [pins[0].lng, pins[0].lat], zoom: 15 };
     if (pins.length) {
       const lats = pins.map((p) => p.lat), lngs = pins.map((p) => p.lng);
@@ -138,51 +185,85 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     return { key };
   })();
 
-  function openRound(id: string) {
+  /** Leave any sub-page (round, person, alerts, inbox, add people). */
+  function closePages() {
+    setSelected(null);
     setGame(null);
     setAdding(false);
+    setPerson(null);
+    setAlertsFor(null);
+    setInbox(false);
+    setEditing(false);
+  }
+  function openRound(id: string) {
+    closePages();
     setSelected(id);
     setTab("people");
     setDetent("mid");
   }
   function go(t: Tab) {
     setTab(t);
-    setSelected(null);
-    setGame(null);
-    setAdding(false);
+    closePages();
     if (t !== "people" && detent === "peek") setDetent("mid");
   }
 
-  const openAdding = () => (setSelected(null), setAdding(true), setDetent("full"));
-  const title = adding
-    ? "Add people"
+  const openAdding = () => (closePages(), setAdding(true), setDetent("full"));
+  const openPerson = (id: string) => (closePages(), setPerson(id), setDetent("mid"));
+  const openInbox = () => (closePages(), setInbox(true), setDetent("full"));
+  // Whose page we're on (for the bell): a friend's round, or a friend who isn't playing.
+  const pageOf = sel && sel.user_id !== me ? sel.user_id : person;
+  const watching = (id: string | null) => !!id && data.watches.some((w) => w.watcher_id === me && w.golfer_id === id);
+  const unread = data.notes.filter((n) => !n.read_at).length;
+  const title = editing
+    ? "Edit profile"
+    : alertsFor
+    ? `Alerts · ${data.profiles.get(alertsFor)?.display_name || "Golfer"}`
+    : inbox
+    ? "Notifications"
+    : person
+    ? data.profiles.get(person)?.display_name || "Golfer"
+    : adding
+    ? "Add buddies"
     : sel
     ? sel.user_id === me ? "Your round" : data.profiles.get(sel.user_id)?.display_name || "Golfer"
-    : tab === "people" ? "People" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Profile";
+    : tab === "people" ? "Buddies" : tab === "round" ? (live ? "My Round" : "Start a Round") : "Profile";
+
+  // On My Round the "sharing live" indicator sits in the sheet header, leaving the top of the map clear.
+  const pillInSheet = Boolean(live) && tab === "round" && !sel && !adding && !person && !inbox && !alertsFor && !editing;
 
   const header = (
     <div className="sheet-head">
-      {(sel || adding) && (
-        <button className="icon-btn" aria-label="Back to people" onClick={() => (setSelected(null), setAdding(false))}>
+      {(sel || adding || person || inbox || alertsFor || editing) && (
+        <button className="icon-btn" aria-label="Back" onClick={() => (alertsFor ? setAlertsFor(null) : closePages())}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="m15 6-6 6 6 6" /></svg>
         </button>
       )}
-      {tab === "people" && !sel && !adding && search !== null ? (
-        <input className="search" autoFocus value={search} placeholder="Search name or @username" aria-label="Search people"
+      {tab === "people" && !sel && !adding && !person && !inbox && search !== null ? (
+        <input className="search" autoFocus value={search} placeholder="Search buddies or @username" aria-label="Search buddies"
           onChange={(e) => setSearch(e.target.value)} />
       ) : (
         <h2>{title}</h2>
       )}
-      {tab === "people" && !sel && !adding && (
+      {pillInSheet && live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} inSheet />}
+      {pageOf && !alertsFor && (
+        <button className={`icon-btn${watching(pageOf) ? " on" : ""}`} aria-label="Alerts for this person" onClick={() => (setAlertsFor(pageOf), setDetent("full"))}>
+          <BellIcon filled={watching(pageOf)} />
+        </button>
+      )}
+      {tab === "people" && !sel && !adding && !person && !inbox && (
         <>
-          <button className="icon-btn" aria-label={search !== null ? "Close search" : "Search people"} onClick={() => setSearch(search !== null ? null : "")}>
+          <button className="icon-btn bell" aria-label={unread ? `${unread} new alerts` : "Notifications"} onClick={openInbox}>
+            <BellIcon />
+            {unread > 0 && <i className="dot-badge">{unread}</i>}
+          </button>
+          <button className="icon-btn" aria-label={search !== null ? "Close search" : "Search buddies"} onClick={() => setSearch(search !== null ? null : "")}>
             {search !== null ? (
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M6 6l12 12M18 6 6 18" /></svg>
             ) : (
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
             )}
           </button>
-          <button className="icon-btn" aria-label="Add people" onClick={openAdding}>
+          <button className="icon-btn" aria-label="Add buddies" onClick={openAdding}>
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 5v14M5 12h14" /></svg>
           </button>
         </>
@@ -192,29 +273,46 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   return (
     <div className="app">
-      <MapView pins={pins} course={course} focus={focus} bottomPad={sheetPx} onPin={openRound} />
+      <MapView pins={[...pins, ...spotPins]} course={course} tools={tools} focus={focus} bottomPad={sheetPx}
+        onPin={(id) => (id.startsWith("spot-") ? openPerson(id.slice(5)) : openRound(id))} />
       <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20.5 3.5 3.8 10.6c-.9.4-.8 1.7.2 1.9l6.6 1.2 1.3 6.6c.2 1 1.5 1.1 1.9.2L20.5 3.5z" /></svg>
       </button>
-      {live && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
+      {live && !pillInSheet && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
+      {!live && sharingWith.length > 0 && (
+        <button className="loc-pill" onClick={() => go("me")}>
+          📍 Sharing location with {sharingWith.length === 1 ? data.profiles.get(sharingWith[0].viewer_id)?.display_name || "1 person" : `${sharingWith.length} people`}
+        </button>
+      )}
       {data.error && <p className="toast err" role="alert">Couldn't refresh: {data.error}</p>}
+      {notice && <p className="toast" role="status" onClick={() => setNotice(null)}>{notice}</p>}
+      <NoteBanner data={data} onOpen={(n) => (rounds.some((r) => r.id === n.round_id) ? openRound(n.round_id) : openInbox())} />
 
-      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header} view={adding ? "adding" : sel?.id ?? tab}>
-        {adding ? (
+      <Sheet detent={detent} onDetent={setDetent} onHeight={setSheetPx} header={header}
+        view={editing ? "edit-profile" : alertsFor ? `alerts-${alertsFor}` : inbox ? "inbox" : person ? `person-${person}` : adding ? "adding" : sel?.id ?? tab}>
+        {editing ? (
+          <EditProfile data={data} me={me} />
+        ) : alertsFor ? (
+          <AlertSettings data={data} me={me} golferId={alertsFor} />
+        ) : inbox ? (
+          <Inbox data={data} onOpen={(id) => rounds.some((r) => r.id === id) && openRound(id)} />
+        ) : person ? (
+          <PersonCard data={data} me={me} id={person} onAlerts={() => (setAlertsFor(person), setDetent("full"))} />
+        ) : adding ? (
           <AddPeople data={data} me={me} incomingCode={invite} onCodeUsed={clearInvite} />
         ) : sel ? (
           <RoundDetail round={sel} data={data} me={me} now={now} onPlay={setGame} />
         ) : tab === "people" ? (
-          <People data={data} me={me} now={now} rounds={rounds} query={search ?? ""} onOpen={openRound} onAddPeople={openAdding} />
+          <People data={data} me={me} now={now} rounds={rounds} query={search ?? ""} onOpen={openRound} onPerson={openPerson} onAddPeople={openAdding} />
         ) : tab === "round" ? (
           <MyRound data={data} me={me} now={now} gps={gps} />
         ) : (
-          <Me data={data} me={me} now={now} />
+          <Me data={data} me={me} now={now} onEdit={() => (setEditing(true), setDetent("full"))} />
         )}
       </Sheet>
 
       <nav className="tabbar" role="tablist">
-        <TabButton id="people" tab={tab} go={go} label="People" badge={incoming}>
+        <TabButton id="people" tab={tab} go={go} label="Buddies" badge={incoming}>
           <path d="M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7.5 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 19.5C2 16 5 14 8.5 14s6.5 2 6.5 5.5V20H2v-.5zm14.5.5v-.5c0-1.9-.7-3.5-1.9-4.6.4-.1.9-.1 1.4-.1 3 0 6 1.7 6 4.7v.5h-5.5z" />
         </TabButton>
         <TabButton id="round" tab={tab} go={go} label={live ? `Hole ${live.hole}` : "Round"}>
@@ -261,13 +359,13 @@ function TabButton({ id, tab, go, label, badge, children }: {
 }
 
 /** Always visible while sharing (HANDOFF §6), with a one-tap Stop. */
-function SharingPill({ roundId, hole, reload }: { roundId: string; hole: number; reload: () => void }) {
+function SharingPill({ roundId, hole, reload, inSheet }: { roundId: string; hole: number; reload: () => void; inSheet?: boolean }) {
   const [confirm, setConfirm] = useState(false);
   const { busy, err, run } = useAction(reload);
   return (
-    <div className="sharing" role="status">
+    <div className={`sharing${inSheet ? " in-sheet" : ""}`} role="status">
       <div className="sharing-row">
-        <span><i className="dot" aria-hidden /> Sharing live · Hole {hole}</span>
+        <span><i className="dot" aria-hidden /> {inSheet ? "Sharing live" : `Sharing live · Hole ${hole}`}</span>
         <button className="btn small" onClick={() => setConfirm(!confirm)}>Stop</button>
       </div>
       {confirm && <StopConfirm busy={busy} onYes={() => run(() => endRound(roundId, "cancelled"))} onNo={() => setConfirm(false)} />}
@@ -275,3 +373,13 @@ function SharingPill({ roundId, hole, reload }: { roundId: string; hole: number;
     </div>
   );
 }
+
+function BellIcon({ filled }: { filled?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden>
+      <path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z" />
+      <path d="M10 20.5a2 2 0 0 0 4 0" fill="none" />
+    </svg>
+  );
+}
+

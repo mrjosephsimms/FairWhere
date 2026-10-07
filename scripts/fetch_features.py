@@ -14,7 +14,7 @@ import json, pathlib, sys, urllib.request
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from osm_http import write_courses  # noqa: E402
 
-UA = {"User-Agent": "find-my-golfer/0.1 (course features import)"}
+UA = {"User-Agent": "fairwhere/0.1 (course features import)"}
 PAD = 0.0025  # ~250 m around the holes
 
 def get(url):

@@ -12,3 +12,6 @@ supabase/.branches/
 *.p8
 scripts/.osm_cache/
 __pycache__/
+
+# Claude Code agent worktrees
+.claude/worktrees/

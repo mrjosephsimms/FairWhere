@@ -13,7 +13,7 @@ import json, math, sys, urllib.parse, urllib.request, argparse, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from osm_http import write_courses  # noqa: E402
 
-UA = {"User-Agent": "find-my-golfer/0.1 (course import)"}
+UA = {"User-Agent": "fairwhere/0.1 (course import)"}
 
 def get(url):
     with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=90) as r:

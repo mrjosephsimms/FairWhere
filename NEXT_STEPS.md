@@ -12,13 +12,13 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   network policy blocked `*.supabase.co`.
 
 ## Supabase project — set up 2026-10-03 (local Mac session)
-- Project: **FindMyGolfer**, ref `uvyeenrkkvvsizszdizv`, URL `https://uvyeenrkkvvsizszdizv.supabase.co`,
+- Project: **FindMyGolfer** (the app is now named FairWhere), ref `uvyeenrkkvvsizszdizv`, URL `https://uvyeenrkkvvsizszdizv.supabase.co`,
   us-east-1, free plan. Separate from SaleMap's project, as intended. Repo is `supabase link`ed.
 - [x] Migrations 01–03 applied with `supabase db push --linked`. Verified: 6 public tables all RLS-on,
       `courses` = 2 rows, cron `expire-stale-rounds` (*/15) active, `rounds` + `friendships` in `supabase_realtime`.
       (01 needed `pgcrypto` → `extensions` schema: hosted Supabase installs extensions there.)
 - [x] Auth config pushed from `supabase/config.toml` (`supabase config push`): site URL `http://localhost:5180`,
-      redirect URLs `findmygolfer://auth-callback` + `http://localhost:5180` (+ `/**`), email OTP length 8 → 6.
+      redirect URLs `fairwhere://auth-callback` + `http://localhost:5180` (+ `/**`), email OTP length 8 → 6.
 - [x] `app/.env` written (URL + `sb_publishable_…` key; gitignored, local to this Mac).
 - [x] Custom SMTP (Gmail app password, mrjosephsimms@gmail.com) set in the dashboard by Sunny; email rate limit 30/h.
 - [x] Magic-link email with the 6-digit code pushed (`supabase/templates/magic_link.html`). Use the code when the
@@ -32,12 +32,13 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
    (Realtime). If it doesn't, check that `rounds` and `friendships` are in Database → Publications →
    `supabase_realtime`.
 4. Finish the round: B should see "Finished hh:mm"; A's `last_lat/last_lng` in the table must be null.
-5. `npm run ios` → run in the iOS Simulator; test the email link (opens `findmygolfer://auth-callback`).
+5. `npm run ios` → run in the iOS Simulator; test the email link (opens `fairwhere://auth-callback`).
 
 ## Open decisions for Sunny
-- **Bundle ID**: `com.sunnysimms.findmygolfer` is a placeholder (`app/capacitor.config.ts` + Xcode project).
-  It can't be renamed after the App ID is registered with Apple, so confirm it first.
-- Domain: none yet. One would be needed for the v1.1 web share link and https invite links.
+- **Name decided 2026-10-04: FairWhere.** Bundle ID `com.sunnysimms.fairwhere`, URL scheme `fairwhere://`.
+  To do (Sunny): buy fairwhere.app (+ fairwhere.golf), quick check at tmsearch.uspto.gov, and change the SMTP
+  sender name in Supabase (Auth -> Emails -> SMTP) to "FairWhere". Then point `addLink()` at the live domain.
+- Domain: fairwhere.app (to buy). Needed for https invite/QR links and the v1.1 web share link.
 - Apple / Google sign-in: needs an App ID, Services ID and Sign in with Apple key on team `8424XCN267`,
   plus a Google OAuth client. Email sign-in works without them.
 - Open product questions from `docs/handoff/HANDOFF.md` §8 (spectator links, showing scores).
@@ -46,8 +47,27 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
 - 242 OSM-mapped public SoCal courses added to `data/courses.json` by `scripts/import_region.py`; seed in
   `supabase/migrations/20261005000001/2_seed_socal_courses.sql`. **Not applied to the live project yet.**
 - Before applying: decide on the "unsure access" country clubs / military courses and rename the placeholder
-  course/nine names listed in the PR. `listCourses()` loads `data` for every course (a few MB with 244 courses):
-  switch the course picker to `id, name, address, nines` and fetch `data` on pick.
+  course/nine names listed in the PR. The course picker already loads only
+  `id, name, address, nines` + a center point and fetches `data` on pick (PR #4).
+
+## Phone sign-in (text a code) — built, switched off
+
+The sign-in screen shows an Email | Phone toggle by itself once the Supabase project has
+phone login on (it reads `/auth/v1/settings`). To turn it on:
+1. Make a Twilio account, create a **Verify** service (or buy a number for plain Twilio SMS).
+2. Supabase dashboard -> Auth -> Sign In / Providers -> Phone: enable, pick Twilio Verify,
+   paste Account SID / Auth Token / Verify Service SID. Add test phone numbers + fixed codes
+   there for App Review / dev (keep them OUT of config.toml — this repo is public).
+3. Pin `[auth.sms] enable_signup = true` and `[auth.sms.twilio_verify] enabled = true`
+   (secret via `env(...)`) in `supabase/config.toml` BEFORE the next `supabase config push`,
+   or the push turns phone login back off.
+
+## Location (2026-10-04)
+- Built: everyday location sharing (off by default, owner grants per person with an expiry), "not at a golf
+  course" check on Start a Round, auto-finish when the golfer leaves the course (client 10 min / 3 km rule +
+  server 2 km backup in notify_tick). Web sends everyday location only while the app is open.
+- Native TODO: background location for everyday sharing needs the background-geolocation plugin + UIBackgroundModes
+  `location` + requesting "Always" only when sharing is turned on (purpose string already in Info.plist).
 
 ## Then: Milestone 3 (background GPS)
 - Port the patch-package fix for `@capacitor-community/background-geolocation@1.2.26` from the SaleMap
@@ -56,9 +76,7 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   Write `hole`/`hole_fraction`/`last_*` on hole change, else at most every 60–90 s. Add a debug overlay
   (distance, candidate hole, fix count) for the Redhawk field test.
 
-## Related: Yardsale Club (SaleMap) is being shelved
-- Archive guide: SaleMap repo `ARCHIVE.md`, in draft PR https://github.com/mrjosephsimms/SaleMap/pull/70
-  (not merged yet). After merging, create tag `archive/yardsale-club-2026-10-03` (commands in ARCHIVE.md).
-- Still to do on the Mac mini: encrypted backup of the secrets (Apple `.p8` keys are the only copies),
-  `pg_dump` of the SaleMap DB, then choose Mothball vs Cold storage.
-  If it stays live: the Apple sign-in client secret in SaleMap's Supabase expires ~Dec 8 2026.
+## Related: Yard Sale Club (SaleMap) stays live
+- Decided 2026-10-04: Yard Sale Club is **not** being shelved. FairWhere launches as its own App Store app
+  (own repo, Supabase project and bundle ID; shares only the Apple Developer team). Don't merge SaleMap's draft
+  ARCHIVE.md PR (#70).
