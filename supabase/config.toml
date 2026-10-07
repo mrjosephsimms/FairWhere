@@ -29,7 +29,13 @@ otp_length = 6
 
 # Emails per hour across the project (only adjustable with custom SMTP).
 [auth.rate_limit]
+# Project-wide sign-in emails per hour. Gmail SMTP allows ~500/day; move to Resend before this
+# needs to go higher (each new user's first sign-in sends one).
 email_sent = 30
+# Per IP address, per 5 minutes: requesting codes / signing in, and checking codes (stops guessing).
+sign_in_sign_ups = 30
+token_verifications = 30
+token_refresh = 150
 
 # Native Sign in with Apple (app/ios/App/App/AppleSignInPlugin.swift): Supabase checks Apple's
 # identity token against the app's bundle ID. No secret needed (that's only for the web flow).

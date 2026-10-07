@@ -128,10 +128,22 @@ Done 2026-10-07 (PR "Polish"):
   30-minute round memory) — best done on your real iPhone.
 
 ## 6. Backend ready for real users
-- [ ] Every RLS test passes against a fresh database, and hosted policies match the migrations.
-- [ ] Cron jobs (stale rounds, alert jobs) are verified running on the hosted project.
-- [ ] Rate limits on friend requests, reports and sign-in codes.
-- [ ] Decision for Sunny: the free Supabase plan pauses projects after about a week of inactivity and has no daily backups. Recommend Pro ($25/mo) before launch.
+- [x] Every RLS test passes against a fresh database, and hosted policies match the migrations.
+- [x] Cron jobs (stale rounds, alert jobs) are verified running on the hosted project.
+- [x] Rate limits on friend requests, reports and sign-in codes.
+- [x] Decision for Sunny: the free Supabase plan pauses projects after about a week of inactivity and has no daily backups. Recommend Pro ($25/mo) before launch.
+
+Done 2026-10-07 (PR "Backend ready for real users"):
+- Fresh database from the migrations: the whole RLS suite passes, and its 47 policies are **identical** to the live
+  project's (`pg_policies` dumped from both and diffed). All 16 public tables have RLS on.
+- Live cron: expire-stale-rounds (every 15 min), notify-tick and push-sweep (every minute) all running, 0 failures in
+  the last hour. Added trim-job-logs (daily; pg_cron logged ~2,900 rows a day and never trimmed them).
+- Limits (migration 17, live, tested): 20 friend requests an hour / 60 a day; 10 reports a day and one per person per
+  day; profile photos 2 MB JPEG only. Sign-in: Supabase's per-IP limits pinned in config.toml (30 code requests and 30
+  code checks per 5 min per IP); project-wide sign-in emails stay 30/hour on Gmail SMTP → switch to Resend before
+  launch traffic.
+- **Sunny decided: upgrade FairWhere's Supabase project to Pro ($25/mo) before launch** (dashboard → Billing; daily
+  backups, no pausing).
 
 ## 7. App Store package
 - [ ] App ID `com.sunnysimms.fairwhere` with Sign in with Apple and Push, an App Store Connect record "FairWhere", and version 1.0 build 1.
