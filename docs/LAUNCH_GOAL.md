@@ -53,10 +53,22 @@ Done 2026-10-07 (PR "Background GPS during a live round"):
 - Still to do on a real iPhone: a real round at Redhawk with the phone in a pocket; battery use over 4 h.
 
 ## 3. Push notifications
-- [ ] A `device_tokens` table (RLS: owner only, with tests) and APNs registration via `@capacitor/push-notifications`, asked after a short in-app explanation and not at first launch.
-- [ ] Server sender: a Supabase Edge Function delivers `notifications` rows over APNs (the team's APNs `.p8` key) and stamps `pushed_at`. It is idempotent, and it never pushes alerts the watcher didn't ask for.
-- [ ] Tapping a push opens that friend's round.
-- [ ] Proof: an `xcrun simctl push` payload opens the right screen, plus an Edge Function test with a mocked APNs.
+- [x] A `device_tokens` table (RLS: owner only, with tests) and APNs registration via `@capacitor/push-notifications`, asked after a short in-app explanation and not at first launch.
+- [x] Server sender: a Supabase Edge Function delivers `notifications` rows over APNs (the team's APNs `.p8` key) and stamps `pushed_at`. It is idempotent, and it never pushes alerts the watcher didn't ask for.
+- [x] Tapping a push opens that friend's round.
+- [x] Proof: an `xcrun simctl push` payload opens the right screen, plus an Edge Function test with a mocked APNs.
+
+Done 2026-10-07 (PR "Push notifications for alerts"):
+- Migration 15 (live): `device_tokens` + `register_device()` (owner-only, phone can move accounts), `claim_pushes()`
+  (stamps `pushed_at` first: at most once; re-checks the watch), `push_feedback()`, and a pg_net nudge to the `push`
+  function on every new alert plus a once-a-minute sweep. 16 new DB checks.
+- `push` Edge Function deployed (no JWT; harmless to call). Shared alert text with the app
+  (`supabase/functions/_shared/notes.ts`), times in the recipient's zone. 6 sender tests with a mocked APNs.
+- iPhone Simulator: "Turn on notifications" (Edit profile, or the card in a buddy's alert settings) → iOS prompt →
+  token saved with its zone; a payload built by the sender's own code showed as a banner, and tapping it opened that
+  round from another tab.
+- **Not yet end to end with Apple:** needs the APNs key set as Edge Function secrets (see NEXT_STEPS.md), then a real
+  alert from a buddy's round.
 
 ## 4. Accounts, safety, App Review requirements
 - [ ] Native **Sign in with Apple** (team `8424XCN267`, bundle `com.sunnysimms.fairwhere`) plus the email/phone code. Google stays off unless Sunny asks.

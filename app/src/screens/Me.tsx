@@ -11,6 +11,8 @@ import { fmtToPar, summarize } from "../lib/score";
 import { fmtDur } from "../lib/time";
 import { resizeToJpeg } from "../lib/image";
 import { supabase } from "../lib/supabase";
+import { forgetThisPhone } from "../lib/push";
+import { PushSetting } from "./Alerts";
 import { Avatar } from "../components/Avatar";
 import { HoleStrip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
@@ -85,7 +87,7 @@ export function Me({ data, me, now, onEdit }: { data: LiveData; me: string; now:
 
       {hist && <RoundHistory hist={hist} parsOf={parsOf} now={now} />}
 
-      <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
+      <button className="btn ghost" onClick={() => forgetThisPhone().catch(() => {}).finally(() => supabase.auth.signOut())}>Sign out</button>
       <p className="note center">Course data © OpenStreetMap contributors (ODbL) · Map © OpenFreeMap</p>
     </div>
   );
@@ -209,6 +211,7 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
             <button type="button" className="link" onClick={() => run(() => setHomeCourse(me, null))}>Clear home course</button>
           )}
         </div>
+        <PushSetting />
         {user && (
           <PasswordForm label={hasPassword(user) ? "Change password" : "Password (optional, sign in without a code)"}
             cta={hasPassword(user) ? "Change" : "Save"} />

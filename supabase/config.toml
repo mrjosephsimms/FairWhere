@@ -30,3 +30,8 @@ otp_length = 6
 # Emails per hour across the project (only adjustable with custom SMTP).
 [auth.rate_limit]
 email_sent = 30
+
+# Push sender (supabase/functions/push). Called by the database (pg_net), not by users, and
+# harmless to call: it only delivers alerts that are already due, each at most once.
+[functions.push]
+verify_jwt = false

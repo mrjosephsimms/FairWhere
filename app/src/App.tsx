@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { supabaseConfigured } from "./lib/supabase";
 import { initDeepLinks, takePendingAdd } from "./lib/native";
+import { initPush, type PushTarget } from "./lib/push";
 import { useAction, useLiveData, useNow, useSession } from "./lib/hooks";
 import { endRound } from "./lib/db";
 import { roundInfo, visibleRounds } from "./lib/roundInfo";
@@ -209,6 +210,17 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
 
   const openAdding = () => (closePages(), setAdding(true), setDetent("full"));
   const openPerson = (id: string) => (closePages(), setPerson(id), setDetent("mid"));
+
+  // A tapped push: that round if it's still on the map, else the friend's page.
+  const [pushTarget, setPushTarget] = useState<PushTarget | null>(null);
+  useEffect(() => initPush(setPushTarget), []);
+  useEffect(() => {
+    if (!pushTarget || !data.loaded) return;
+    const r = pushTarget.roundId ? rounds.find((x) => x.id === pushTarget.roundId) : undefined;
+    if (r) openRound(r.id);
+    else if (pushTarget.golferId) openPerson(pushTarget.golferId);
+    setPushTarget(null);
+  }, [pushTarget, data.loaded]);
   const openInbox = () => (closePages(), setInbox(true), setDetent("full"));
   // Whose page we're on (for the bell): a friend's round, or a friend who isn't playing.
   const pageOf = sel && sel.user_id !== me ? sel.user_id : person;

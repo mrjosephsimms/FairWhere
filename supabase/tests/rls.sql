@@ -317,6 +317,50 @@ select pg_temp.fails($$insert into public.notifications (user_id, golfer_id, rou
 select pg_temp.fails($$select public.notify_tick()$$, 'clients cannot run the alert job');
 reset role;
 
+-- Push (step 3): phones, the nudge to the sender, and claiming alerts exactly once.
+select pg_temp.ok((select count(*) > 0 from net.calls where url like '%/functions/v1/push'), 'new alerts nudge the push sender');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+set role authenticated;
+select public.register_device(repeat('ab', 32), 'America/New_York');
+select pg_temp.ok((select count(*) = 1 and bool_and(tz = 'America/New_York') from public.device_tokens), 'register my phone (with its time zone)');
+select public.register_device(upper(repeat('ab', 32)), 'Not/AZone');
+select pg_temp.ok((select count(*) = 1 and bool_and(tz = 'America/Los_Angeles') from public.device_tokens), 're-register: same phone, unknown zone falls back');
+select pg_temp.fails($$select public.register_device('not-a-token')$$, 'device tokens must be hex');
+select pg_temp.fails($$insert into public.device_tokens (token) values (repeat('cd', 32))$$, 'phones register through register_device only');
+select pg_temp.fails($$select * from public.claim_pushes()$$, 'clients cannot claim pushes');
+select pg_temp.fails($$select public.push_feedback(repeat('ab', 32), 'sandbox', true)$$, 'clients cannot report on tokens');
+select pg_temp.fails($$select public.kick_push()$$, 'clients cannot nudge the sender');
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+set role authenticated;
+select pg_temp.ok((select count(*) = 0 from public.device_tokens), 'nobody else sees my phone');
+delete from public.device_tokens;
+reset role;
+select pg_temp.ok((select count(*) = 1 from public.device_tokens), 'nobody else can remove my phone');
+-- Bob turns "finished" off after that alert was made: the sender must skip it.
+update public.watches set finished = false where watcher_id = '00000000-0000-0000-0000-00000000000b';
+set role service_role;
+select pg_temp.ok((select count(*) = 4 and bool_and(token = repeat('ab', 32)) and not bool_or(kind = 'finished')
+                          and bool_and(golfer_name like 'Sunny%') and bool_and(course_name = 'Redhawk Golf Club') and bool_and(tz = 'America/Los_Angeles')
+                   from public.claim_pushes()), 'sender gets each wanted alert for each phone, not the one turned off');
+select pg_temp.ok((select count(*) = 0 from public.claim_pushes()), 'a claimed alert is never sent twice');
+reset role;
+select pg_temp.ok((select bool_and(pushed_at is not null) from public.notifications), 'every claimed alert is stamped pushed');
+set role service_role;
+select public.push_feedback(repeat('ab', 32), 'sandbox', false);
+reset role;
+select pg_temp.ok((select env = 'sandbox' from public.device_tokens), 'sender records which APNs environment a phone uses');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+set role authenticated;
+select public.register_device(repeat('ab', 32), 'America/Los_Angeles');
+reset role;
+select pg_temp.ok((select user_id = '00000000-0000-0000-0000-00000000000d' and env is null from public.device_tokens), 'a phone signed into another account moves over');
+set role service_role;
+select public.push_feedback(repeat('ab', 32), null, true);
+reset role;
+select pg_temp.ok((select count(*) = 0 from public.device_tokens), 'dead tokens are removed');
+update public.watches set finished = true where watcher_id = '00000000-0000-0000-0000-00000000000b';
+
 -- Everyday location sharing (off by default, owner grants per person) and the gone-home backup.
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 set role authenticated;
