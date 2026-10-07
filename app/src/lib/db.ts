@@ -86,6 +86,29 @@ export async function setAvatar(id: string, photo: Blob) {
   return url;
 }
 
+// ------------------------------------------------------------------ account & safety (App Review)
+
+/**
+ * Delete your account and everything in it (Apple 5.1.1(v)): photos first (Storage has to be
+ * emptied through its API), then delete_my_account() cascades through every table.
+ */
+export async function deleteMyAccount(id: string) {
+  const files = await supabase.storage.from("avatars").list(id, { limit: 1000 });
+  if (files.data?.length) await supabase.storage.from("avatars").remove(files.data.map((f) => `${id}/${f.name}`));
+  check(await supabase.rpc("delete_my_account"));
+}
+
+export type ReportReason = "photo" | "name" | "harassment" | "spam" | "other";
+
+export const blockUser = async (target: string) => void check(await supabase.rpc("block_user", { target }));
+export const reportUser = async (target: string, reason: ReportReason, details: string, alsoBlock: boolean) =>
+  void check(await supabase.rpc("report_user", { target, reason, details, also_block: alsoBlock }));
+
+export interface Blocked { id: string; display_name: string; username: string | null; blocked_at: string }
+export const listBlocks = async (): Promise<Blocked[]> => check(await supabase.rpc("my_blocks")) ?? [];
+export const unblockUser = async (blocker: string, blocked: string) =>
+  void check(await supabase.from("blocks").delete().eq("blocker_id", blocker).eq("blocked_id", blocked));
+
 // ------------------------------------------------------------------ friends
 
 export async function listFriendships(): Promise<Friendship[]> {

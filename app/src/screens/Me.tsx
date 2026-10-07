@@ -13,6 +13,7 @@ import { resizeToJpeg } from "../lib/image";
 import { supabase } from "../lib/supabase";
 import { forgetThisPhone } from "../lib/push";
 import { PushSetting } from "./Alerts";
+import { About, BlockedList, DeleteAccount } from "./Safety";
 import { Avatar } from "../components/Avatar";
 import { HoleStrip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
@@ -88,7 +89,8 @@ export function Me({ data, me, now, onEdit }: { data: LiveData; me: string; now:
       {hist && <RoundHistory hist={hist} parsOf={parsOf} now={now} />}
 
       <button className="btn ghost" onClick={() => forgetThisPhone().catch(() => {}).finally(() => supabase.auth.signOut())}>Sign out</button>
-      <p className="note center">Course data © OpenStreetMap contributors (ODbL) · Map © OpenFreeMap</p>
+      <DeleteAccount me={me} />
+      <About />
     </div>
   );
 }
@@ -212,6 +214,7 @@ export function EditProfile({ data, me }: { data: LiveData; me: string }) {
           )}
         </div>
         <PushSetting />
+        <BlockedList me={me} />
         {user && (
           <PasswordForm label={hasPassword(user) ? "Change password" : "Password (optional, sign in without a code)"}
             cta={hasPassword(user) ? "Change" : "Save"} />

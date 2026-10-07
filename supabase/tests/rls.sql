@@ -418,4 +418,76 @@ update public.profiles set home_course_id = 'redhawk' where id = '00000000-0000-
 reset role;
 select pg_temp.ok((select home_course_id is null from public.profiles where id = '00000000-0000-0000-0000-00000000000b'), 'cannot set someone else''s home course');
 
+-- App Review (step 4): block, report, delete account.
+reset role;
+delete from public.friendships;
+insert into public.friendships (user_id, friend_id, status) values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b', 'accepted'), ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000d', 'accepted'), ('00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-00000000000d', 'accepted');
+insert into public.watches (watcher_id, golfer_id, tee_off) values ('00000000-0000-0000-0000-00000000000d', '00000000-0000-0000-0000-00000000000a', true) on conflict do nothing;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+select public.block_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.ok((select count(*) = 0 from public.friendships where '00000000-0000-0000-0000-00000000000d' in (user_id, friend_id)), 'blocking removes the friendship');
+select pg_temp.ok((select count(*) = 0 from public.profiles where id = '00000000-0000-0000-0000-00000000000d'), 'blocker no longer sees them');
+select pg_temp.ok((select count(*) = 1 and bool_and(id = '00000000-0000-0000-0000-00000000000d') from public.my_blocks()), 'blocked people listed (with names) to unblock');
+select pg_temp.fails($$select public.block_user(auth.uid())$$, 'cannot block yourself');
+select pg_temp.fails($$insert into public.blocks (blocked_id) values ('00000000-0000-0000-0000-00000000000c')$$, 'blocks only through block_user');
+reset role;
+select pg_temp.ok((select count(*) = 0 from public.watches where watcher_id = '00000000-0000-0000-0000-00000000000d' and golfer_id = '00000000-0000-0000-0000-00000000000a'), 'their alerts about you stop');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+set role authenticated;
+select pg_temp.ok((select count(*) = 0 from public.profiles where id = '00000000-0000-0000-0000-00000000000a'), 'blocked person no longer sees the blocker');
+select pg_temp.ok((select count(*) = 0 from public.blocks), 'blocked person cannot see the block');
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+set role authenticated;
+do $$ begin
+  perform public.request_friend((select friend_code from public.profiles p where p.id = '00000000-0000-0000-0000-00000000000a'));
+  raise exception 'FAIL: blocked person could send a request';
+exception when others then
+  if sqlerrm like 'FAIL%' then raise; end if;
+  if sqlerrm <> 'No golfer has that code or username' then raise exception 'FAIL: block revealed: %', sqlerrm; end if;
+  raise notice 'ok   blocked person cannot send a request (sees "not found", block not revealed)';
+end $$;
+reset role;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+delete from public.blocks where blocked_id = '00000000-0000-0000-0000-00000000000d';
+reset role;
+select pg_temp.ok(not public.is_blocked_between('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000d'), 'unblocking lifts the block');
+
+-- Reports
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+set role authenticated;
+select public.report_user('00000000-0000-0000-0000-00000000000a', 'photo', '  not a golf photo  ');
+select pg_temp.fails($$select * from public.reports$$, 'reports are not readable by users');
+select pg_temp.fails($$select public.report_user('00000000-0000-0000-0000-00000000000c', 'spam')$$, 'cannot report a stranger');
+select pg_temp.fails($$select public.report_user('00000000-0000-0000-0000-00000000000a', 'mean')$$, 'report reasons are a fixed list');
+select public.report_user('00000000-0000-0000-0000-00000000000d', 'harassment', null, true);
+reset role;
+select pg_temp.ok((select count(*) = 2 from public.reports), 'reports stored');
+select pg_temp.ok((select reported_name like 'Sunny%' and details = 'not a golf photo' and reporter_id = '00000000-0000-0000-0000-00000000000b' from public.reports where reason = 'photo'),
+  'report keeps a snapshot of who and why');
+select pg_temp.ok(public.is_blocked_between('00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-00000000000d') and not exists (select 1 from public.friendships where '00000000-0000-0000-0000-00000000000d' in (user_id, friend_id) and '00000000-0000-0000-0000-00000000000b' in (user_id, friend_id)),
+  'report and block in one step');
+
+-- Delete account (Apple 5.1.1(v)): everything of theirs goes; everyone else stays.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+set role authenticated;
+select public.register_device(repeat('ef', 32), 'America/Los_Angeles');
+select public.delete_my_account();
+reset role;
+select pg_temp.ok(not exists (select 1 from auth.users where id = '00000000-0000-0000-0000-00000000000b') and not exists (select 1 from public.profiles where id = '00000000-0000-0000-0000-00000000000b'), 'delete account removes the sign-in and profile');
+select pg_temp.ok(not exists (select 1 from public.friendships where '00000000-0000-0000-0000-00000000000b' in (user_id, friend_id))
+             and not exists (select 1 from public.watches where '00000000-0000-0000-0000-00000000000b' in (watcher_id, golfer_id))
+             and not exists (select 1 from public.notifications where '00000000-0000-0000-0000-00000000000b' in (user_id, golfer_id))
+             and not exists (select 1 from public.device_tokens where user_id = '00000000-0000-0000-0000-00000000000b')
+             and not exists (select 1 from public.blocks where '00000000-0000-0000-0000-00000000000b' in (blocker_id, blocked_id))
+             and not exists (select 1 from public.rounds where user_id = '00000000-0000-0000-0000-00000000000b'), 'and all their friendships, alerts, phones, blocks and rounds');
+select pg_temp.ok((select reporter_id is null and reported_name like 'Sunny%' from public.reports where reason = 'photo'), 'their reports stay (anonymised) for review');
+select pg_temp.ok(exists (select 1 from public.profiles where id = '00000000-0000-0000-0000-00000000000a') and exists (select 1 from public.profiles where id = '00000000-0000-0000-0000-00000000000d'), 'other people are untouched');
+select pg_temp.act_as('');
+set role authenticated;
+select pg_temp.fails($$select public.delete_my_account()$$, 'deleting needs a signed-in user');
+reset role;
+
 \warn 'All RLS tests passed.'

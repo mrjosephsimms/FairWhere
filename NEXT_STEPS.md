@@ -73,6 +73,14 @@ Until then the `push` function answers "APNs key not configured" and leaves aler
 Before the first device build: Xcode → App target → Signing & Capabilities should show **Push Notifications**
 (the entitlement is in `ios/App/App/App.entitlements`; automatic signing registers it on the App ID).
 
+## Before App Review: support email + reports
+
+- **support@fairwhere.app must work** (it's on the privacy/terms/support pages): buy fairwhere.app, then e.g.
+  Cloudflare Email Routing → your Gmail. Then point the pages at the domain if you like (`site/`, `app/src/lib/native.ts` SITE).
+- **Reports** (Apple expects action within 24 h): Supabase dashboard → SQL editor:
+  `select * from reports where resolved_at is null order by created_at;` then
+  `update reports set resolved_at = now() where id = '...';` (and block / delete the account if needed).
+
 ## Location (2026-10-04)
 - Built: everyday location sharing (off by default, owner grants per person with an expiry), "not at a golf
   course" check on Start a Round, auto-finish when the golfer leaves the course (client 10 min / 3 km rule +

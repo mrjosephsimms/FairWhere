@@ -13,6 +13,7 @@ import { fmtToPar, summarize } from "../lib/score";
 import { Avatar } from "../components/Avatar";
 import { HoleStrip, PaceChip } from "../components/RoundView";
 import { ModeIcon } from "../components/ModeIcon";
+import { SafetyActions } from "./Safety";
 
 export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPeople }: {
   data: LiveData;
@@ -120,7 +121,9 @@ export function People({ data, me, now, rounds, query, onOpen, onPerson, onAddPe
 }
 
 /** One golfer's round, shown in the sheet while the map zooms to their course. */
-export function RoundDetail({ round, data, me, now, onPlay }: { round: Round; data: LiveData; me: string; now: number; onPlay: (hole: number) => void }) {
+export function RoundDetail({ round, data, me, now, onPlay, onBlocked }: {
+  round: Round; data: LiveData; me: string; now: number; onPlay: (hole: number) => void; onBlocked: () => void;
+}) {
   const [pick, setPick] = useState<number | null>(null);
   const info = roundInfo(round, data.courses.get(round.course_id), now);
   if (!info) return <p className="empty">Loading course…</p>;
@@ -181,6 +184,9 @@ export function RoundDetail({ round, data, me, now, onPlay }: { round: Round; da
         {est.phase === "pre" ? "Tees off" : "Teed off"} {fmtTime(Date.parse(round.tee_time))}
         {round.user_id === me ? " · this is your round" : ""}
       </p>
+      {round.user_id !== me && (
+        <SafetyActions target={round.user_id} name={data.profiles.get(round.user_id)?.display_name || "this golfer"} onBlocked={onBlocked} />
+      )}
     </div>
   );
 }
