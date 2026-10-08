@@ -91,9 +91,12 @@ Expected result: 4+ (Apple may set 12+ for user-to-user sharing; accept whicheve
 
 ## Screenshots
 
-Required: 6.9" (1320 × 2868) and 6.5" (1284 × 2778) iPhone. 5 shots, light mode, polished demo data:
-1. Map with a live buddy's round on the course (Buddies tab, mid sheet): "See which hole they're on".
-2. A buddy's round: hole, est. finish, pace: "Know when they'll be done".
-3. Alerts settings: "Get the alerts you choose".
-4. My Round with the scorecard: "Keep score as you go".
-5. Start a Round / privacy step: "Your location stays yours".
+**Ready to upload:** `design/screenshots/out/6.9/` (1320 × 2868) and `out/6.5/` (1284 × 2778), in order:
+1. "See which hole they're on": Buddies + map, Mike live on hole 10 at Redhawk.
+2. "Know when they'll be done": Mike's round: hole, est. finish, pace, score.
+3. "Get the alerts you choose": the bell: holes 9 & 18, 30 min before finish, teed off / finished.
+4. "Follow the score hole by hole": front-nine scorecard.
+5. "Start a round in seconds": Start a Round with the course picked from location.
+
+Taken 2026-10-08 in the iPhone 17 Simulator, signed in as the reviewer demo account (Mike = demo golfer).
+Regenerate with `python3 design/screenshots/make.py` after replacing `raw/`.
