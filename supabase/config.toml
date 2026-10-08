@@ -44,6 +44,14 @@ enabled = true
 client_id = "com.sunnysimms.fairwhere"
 secret = ""
 
+# Google sign-in (enabled in the dashboard 2026-10-08). The secret lives only in Supabase: export
+# SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET before any `supabase config push`, or don't push auth config.
+[auth.external.google]
+enabled = true
+client_id = "947945052207-aj3fo2tdc0jicc1m3ims4bbutkj8q23s.apps.googleusercontent.com"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+skip_nonce_check = false
+
 # Push sender (supabase/functions/push). Called by the database (pg_net), not by users, and
 # harmless to call: it only delivers alerts that are already due, each at most once.
 [functions.push]
