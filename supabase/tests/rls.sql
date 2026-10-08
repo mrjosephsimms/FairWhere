@@ -543,4 +543,18 @@ exception when others then
 end $$;
 reset role;
 
+-- Demo rounds (App Review): always a live round, moving along, with scores so far.
+reset role;
+delete from public.rounds where user_id = '00000000-0000-0000-0000-00000000000d';
+insert into public.demo_players (user_id, course_id) values ('00000000-0000-0000-0000-00000000000d', 'redhawk');
+select public.demo_tick();
+select public.demo_tick();
+select pg_temp.ok((select count(*) = 1 and bool_and(hole between 1 and 18 and last_lat is not null and last_fix_at > now() - interval '1 minute')
+                   from public.rounds where user_id = '00000000-0000-0000-0000-00000000000d' and status = 'live'), 'demo golfer always has exactly one live round, placed on the course');
+select pg_temp.ok((select count(*) = (select hole - 1 from public.rounds where user_id = '00000000-0000-0000-0000-00000000000d' and status = 'live') from public.round_scores s
+                   join public.rounds r on r.id = s.round_id where r.user_id = '00000000-0000-0000-0000-00000000000d' and r.status = 'live'), 'demo scores cover the holes already played');
+select pg_temp.ok(public.metres_from_course('redhawk', (select last_lat from public.rounds where user_id = '00000000-0000-0000-0000-00000000000d' and status = 'live'),
+                  (select last_lng from public.rounds where user_id = '00000000-0000-0000-0000-00000000000d' and status = 'live')) < 5, 'demo position is on the hole''s line');
+delete from public.demo_players;
+
 \warn 'All RLS tests passed.'

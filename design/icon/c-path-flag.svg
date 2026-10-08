@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e8f5ec"/><stop offset="1" stop-color="#cfead8"/></linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#g)"/>
+  <!-- the hole's path, like the app's map -->
+  <path d="M250 820 C 330 640, 520 700, 560 540 S 690 330, 720 300" fill="none" stroke="#fff" stroke-width="110" stroke-linecap="round"/>
+  <path d="M250 820 C 330 640, 520 700, 560 540 S 690 330, 720 300" fill="none" stroke="#d04146" stroke-width="64" stroke-linecap="round"/>
+  <!-- chevrons along it -->
+  <g fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M372 704 l26 -30 l-38 -10"/><path d="M548 590 l22 -34 l-40 -6"/>
+  </g>
+  <!-- tee badge (you) -->
+  <circle cx="250" cy="820" r="78" fill="#2f7cf6" stroke="#fff" stroke-width="18"/>
+  <!-- green + flag -->
+  <ellipse cx="740" cy="300" rx="120" ry="70" fill="#1f8a4c"/>
+  <rect x="728" y="120" width="20" height="180" rx="10" fill="#111813"/>
+  <path d="M748 122 L870 168 L748 214 Z" fill="#d04146"/>
+</svg>
