@@ -29,6 +29,21 @@ const AppleSignIn = registerPlugin<{
 
 const hex = (b: ArrayBuffer | Uint8Array) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, "0")).join("");
 
+/**
+ * Google: Supabase's OAuth page in Safari's sign-in sheet (Google doesn't allow embedded web
+ * views), back via fairwhere://auth-callback, where initDeepLinks finishes the sign-in. Web: a
+ * plain redirect.
+ */
+export async function signInWithGoogle(): Promise<{ error: { message: string } | null }> {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: authRedirect(), skipBrowserRedirect: isNative, queryParams: { prompt: "select_account" } },
+  });
+  if (error) return { error };
+  if (isNative && data?.url) await Browser.open({ url: data.url, presentationStyle: "popover" });
+  return { error: null };
+}
+
 /** iPhone only. A cancelled sheet isn't an error. */
 export async function signInWithApple(): Promise<{ error: { message: string } | null }> {
   // A one-time value tying Apple's token to this request: Apple gets its hash, Supabase the original.

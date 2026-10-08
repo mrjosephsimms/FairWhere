@@ -506,7 +506,8 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .about-links { display: flex; justify-content: center; gap: 8px; color: var(--muted); }
 .about a { color: inherit; }
 
-.btn.apple { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.apple, .btn.google { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.google { background: #fff; color: #1f1f1f; box-shadow: inset 0 0 0 1px #747775; margin-top: 10px; } /* Google's button style */
 .signin .legal { margin-top: 10px; }
 .signin .legal .link { font-size: inherit; padding: 0; }
 

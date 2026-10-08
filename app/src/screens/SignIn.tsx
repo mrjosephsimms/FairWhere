@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { phoneSignInEnabled, supabase } from "../lib/supabase";
-import { AUTH_LINK_FAILED, authRedirect, isNative, LINKS, openLink, signInWithApple } from "../lib/native";
+import { enabledProviders, supabase } from "../lib/supabase";
+import { AUTH_LINK_FAILED, authRedirect, isNative, LINKS, openLink, signInWithApple, signInWithGoogle } from "../lib/native";
 import { prettyPhone, toE164 } from "../lib/phone";
 import { PasswordInput } from "../components/PasswordInput";
 import { friendlyError } from "../lib/errors";
@@ -9,8 +9,10 @@ type Via = "email" | "phone";
 
 export function SignIn() {
   // Phone appears once the project has an SMS provider (Twilio) connected.
+  // Phone and Google appear once they're switched on in Supabase (SMS provider / Google OAuth client).
   const [phoneOk, setPhoneOk] = useState(false);
-  useEffect(() => void phoneSignInEnabled().then(setPhoneOk), []);
+  const [googleOk, setGoogleOk] = useState(false);
+  useEffect(() => void enabledProviders().then((p) => (setPhoneOk(p.phone), setGoogleOk(p.google))), []);
   const [via, setVia] = useState<Via>("email");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -81,14 +83,27 @@ export function SignIn() {
   return (
     <div className="card signin">
       <h1>Fair<span>Where?</span></h1>
-      {isNative && (
+      {(isNative || googleOk) && (
         <>
+          {isNative && (
           <button className="btn dark apple" disabled={busy} onClick={() => run(signInWithApple)}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden>
               <path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.87-.76-1.47.02-2.83.86-3.59 2.18-1.53 2.66-.39 6.6 1.1 8.75.73 1.06 1.6 2.24 2.73 2.2 1.1-.04 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.41 1.2-2.47-.03-.01-2.3-.88-2.32-3.5zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.65-1.05 1.68-.92 2.67.97.08 1.96-.49 2.56-1.22z" />
             </svg>
             Sign in with Apple
           </button>
+          )}
+          {googleOk && (
+            <button className="btn google" disabled={busy} onClick={() => run(signInWithGoogle)}>
+              <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden>
+                <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/>
+                <path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/>
+                <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/>
+              </svg>
+              Continue with Google
+            </button>
+          )}
           <div className="or">or</div>
         </>
       )}
