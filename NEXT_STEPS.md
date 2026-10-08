@@ -50,7 +50,7 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   course/nine names listed in the PR. The course picker already loads only
   `id, name, address, nines` + a center point and fetches `data` on pick (PR #4).
 
-## Google sign-in — built, switched off until a Google client exists
+## Google sign-in — LIVE (2026-10-08); config push needs SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET set
 
 The "Continue with Google" button appears by itself (iPhone and web) once Supabase has Google on.
 1. console.cloud.google.com → new project "FairWhere" → APIs & Services → OAuth consent screen: External,
