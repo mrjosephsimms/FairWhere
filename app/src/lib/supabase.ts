@@ -15,13 +15,13 @@ export const supabase = createClient(url || "http://localhost:54321", key || "mi
   },
 });
 
-/** Whether the project has phone (text code) sign-in turned on, which needs an SMS provider. */
-export async function phoneSignInEnabled(): Promise<boolean> {
-  if (!url || !key) return false;
+/** Which sign-in methods the project has switched on (phone needs an SMS provider, Google an OAuth client). */
+export async function enabledProviders(): Promise<{ phone: boolean; google: boolean }> {
+  if (!url || !key) return { phone: false, google: false };
   try {
-    const r = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key } });
-    return Boolean((await r.json())?.external?.phone);
+    const ext = (await (await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key } })).json())?.external ?? {};
+    return { phone: Boolean(ext.phone), google: Boolean(ext.google) };
   } catch {
-    return false;
+    return { phone: false, google: false };
   }
 }

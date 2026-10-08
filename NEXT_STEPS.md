@@ -50,6 +50,19 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
   course/nine names listed in the PR. The course picker already loads only
   `id, name, address, nines` + a center point and fetches `data` on pick (PR #4).
 
+## Google sign-in — built, switched off until a Google client exists
+
+The "Continue with Google" button appears by itself (iPhone and web) once Supabase has Google on.
+1. console.cloud.google.com → new project "FairWhere" → APIs & Services → OAuth consent screen: External,
+   app name FairWhere, support email, logo (design/icon/fairwhere-icon-1024.png), privacy/terms URLs
+   (mrjosephsimms.github.io/FairWhere/privacy.html, terms.html), scopes email + profile + openid. Publish it.
+2. Credentials → Create OAuth client ID → **Web application**; Authorized redirect URI:
+   `https://uvyeenrkkvvsizszdizv.supabase.co/auth/v1/callback`.
+3. Supabase dashboard → Auth → Sign In / Providers → Google: enable, paste Client ID + Client Secret, save.
+4. Before the next `supabase config push`, add `[auth.external.google] enabled = true`, `client_id = "<id>"`,
+   `secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"` to config.toml (with that env var set), or the push
+   switches Google back off. The app's `fairwhere://auth-callback` redirect is already allowed.
+
 ## Phone sign-in (text a code) — built, switched off
 
 The sign-in screen shows an Email | Phone toggle by itself once the Supabase project has
