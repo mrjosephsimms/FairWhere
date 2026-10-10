@@ -93,8 +93,9 @@ Before the first device build: Xcode → App target → Signing & Capabilities s
 - **Sign-in emails** go through Gmail SMTP, capped at 30/hour project-wide (Gmail allows ~500/day). Move to Resend
   (as Yard Sale Club did) before launch, then raise `[auth.rate_limit] email_sent`.
 
-- **support@fairwhere.app must work** (it's on the privacy/terms/support pages): buy fairwhere.app, then e.g.
-  Cloudflare Email Routing → your Gmail. Then point the pages at the domain if you like (`site/`, `app/src/lib/native.ts` SITE).
+- **Support email:** the privacy/terms/support pages use **mrjosephsimms@gmail.com** for now (2026-10-09). When
+  fairwhere.app exists, set up support@fairwhere.app (e.g. Cloudflare Email Routing → Gmail), swap it back in `site/*.html`,
+  and point the pages at the domain if you like (`site/`, `app/src/lib/native.ts` SITE).
 - **Reports** (Apple expects action within 24 h): Supabase dashboard → SQL editor:
   `select * from reports where resolved_at is null order by created_at;` then
   `update reports set resolved_at = now() where id = '...';` (and block / delete the account if needed).
