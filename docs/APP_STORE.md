@@ -94,9 +94,12 @@ Location is used only while a round you start is live ("While Using" + the blue 
 
 Subtitle, privacy policy URL, categories (Sports / Navigation), description, keywords, promotional text, support
 and marketing URLs, copyright, build 1.0 (3) attached, price Free, age rating questionnaire (all None/No except
-user-generated content = Yes), and all 10 screenshots (6.9" and 6.5"). **Left for Sunny in the web UI:** App
-Privacy answers (no API), the two "social media" age-rating questions, and App Review Information (contact phone
-+ demo password + the notes above).
+user-generated content = Yes), and all 10 screenshots (6.9" and 6.5"). Name set to **FairWhere: Golf Round Tracker** (2026-10-09).
+
+Done by Sunny in the web UI (2026-10-09, verified via the API): age rating social-media questions = No; App Review
+Information (contact, phone, demo login `review@fairwhere.app` + password matching `.review_account`, notes above).
+Support email on the public pages is mrjosephsimms@gmail.com until fairwhere.app exists. **App Privacy** has no
+API: confirm it shows Published before submitting.
 
 ## Screenshots
 
