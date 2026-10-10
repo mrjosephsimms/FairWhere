@@ -94,8 +94,8 @@ Done 2026-10-07 (PR "App Review requirements"):
   the bundle ID; Google button removed (it was never configured). Built, **not yet tried**: needs a real iPhone or a
   Simulator signed in to an Apple ID.
 - Pages in `site/`, published by `.github/workflows/pages.yml` to https://mrjosephsimms.github.io/FairWhere/
-  (privacy, terms with Apple's zero-tolerance / 24 h report language, support). Contact is **support@fairwhere.app**,
-  which only works once the domain + email forwarding exist.
+  (privacy, terms with Apple's zero-tolerance / 24 h report language, support). Contact is **mrjosephsimms@gmail.com**
+  for now (was support@fairwhere.app; switch back once the domain + email forwarding exist).
 - Checked in the Simulator: Me page (Delete account, links, credits) and the map credits. Report/Block and the
   sign-in screen weren't seen on screen (that test account has no buddies; signing out would need your code).
 
