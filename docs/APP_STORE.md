@@ -80,14 +80,26 @@ Expected result: 4+ (Apple may set 12+ for user-to-user sharing; accept whicheve
 
 - **Sign-in required:** Yes. Demo account (an email + password created for review, with buddies and a live round
   already playing so live sharing is visible without golfing): *see Sunny / the reviewer-account note; never commit it*.
-- **Notes for the reviewer:**
+- **Notes for the reviewer** (paste as-is):
 
-> FairWhere shares a golf round live with the friends you choose. The demo account is already buddies with "Mike" and
-> "Ann", and Mike has a round in progress at Redhawk Golf Club, so you can open him on the Buddies tab or the map and
-> see his hole, pace and finish time update. To try a round yourself, use Round → Start sharing my round; you'll be
-> asked "Hey, it doesn't look like you're at a golf course" (choose Start anyway). Location is used only while a round
-> is live ("While Using" + background indicator) to detect the hole; it stops when the round ends. Sign in with Apple
-> is available. Report / Block are at the bottom of any buddy's page; Delete account is at the bottom of the Me tab.
+```
+FairWhere shares a golf round live with the friends you choose. The demo account is already buddies with "Mike Ross" and "Ann Lee", and Mike always has a round in progress at Redhawk Golf Club, so you can open him on the Buddies tab or the map and see his hole, pace, score and finish time update every few minutes.
+
+To try a round yourself: Round tab -> Start sharing my round. If you're not near a golf course you'll be asked "Hey, it doesn't look like you're at a golf course" - choose Start anyway.
+
+Location is used only while a round you start is live ("While Using" + the blue background indicator) to detect which hole you're on; it stops when the round ends. Sign in with Apple and Google are available on the sign-in screen. Report / Block are at the bottom of any buddy's page; Delete account is at the bottom of the Me tab.
+```
+
+## Filled in App Store Connect via the API (2026-10-08)
+
+Subtitle, privacy policy URL, categories (Sports / Navigation), description, keywords, promotional text, support
+and marketing URLs, copyright, build 1.0 (3) attached, price Free, age rating questionnaire (all None/No except
+user-generated content = Yes), and all 10 screenshots (6.9" and 6.5"). Name set to **FairWhere: Golf Round Tracker** (2026-10-09).
+
+Done by Sunny in the web UI (2026-10-09, verified via the API): age rating social-media questions = No; App Review
+Information (contact, phone, demo login `review@fairwhere.app` + password matching `.review_account`, notes above).
+Support email on the public pages is mrjosephsimms@gmail.com until fairwhere.app exists. **App Privacy** has no
+API: confirm it shows Published before submitting.
 
 ## Screenshots
 
