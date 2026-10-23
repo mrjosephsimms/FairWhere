@@ -1,0 +1,10 @@
+import { asc } from "./asc.mjs";
+const VER = "6271937a-a7f2-4888-9227-c698852f7e4d";
+const rd = (await asc("GET", `/v1/appStoreVersions/${VER}/appStoreReviewDetail`)).data;
+let notes = rd.attributes.notes ?? "";
+const old = "Sign in with Apple and Google are available on the sign-in screen.";
+const add = "Sign in with Apple and Google are available on the sign-in screen; each opens Apple's / Google's sign-in page in a sheet and returns to the app signed in (fixed in build 1.0 (6)).";
+if (notes.includes(old)) notes = notes.replace(old, add); else if (!notes.includes("build 1.0 (6)")) notes += "\n\n" + add;
+await asc("PATCH", `/v1/appStoreReviewDetails/${rd.id}`, { data: { type: "appStoreReviewDetails", id: rd.id, attributes: { notes } } });
+const now = (await asc("GET", `/v1/appStoreVersions/${VER}/appStoreReviewDetail`)).data.attributes;
+console.log("notes updated:", now.notes.includes("build 1.0 (6)"), "| demo password still set:", !!now.demoAccountPassword, "| phone set:", !!now.contactPhone);

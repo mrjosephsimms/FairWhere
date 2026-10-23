@@ -24,7 +24,13 @@ export function SignIn() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    const failed = () => setErr("That sign-in link has expired or was already used. Enter the code from the email, or send a new one.");
+    const failed = (e: Event) => {
+      const why = (e as CustomEvent<string>).detail ?? "";
+      // Provider errors (Apple / Google) get their own message; anything else is an old email link.
+      setErr(/no code|flow state|expired|used/i.test(why) || !why
+        ? "That sign-in link has expired or was already used. Enter the code from the email, or send a new one."
+        : `Couldn't finish signing in: ${friendlyError(why, "please try again.")}`);
+    };
     window.addEventListener(AUTH_LINK_FAILED, failed);
     return () => window.removeEventListener(AUTH_LINK_FAILED, failed);
   }, []);

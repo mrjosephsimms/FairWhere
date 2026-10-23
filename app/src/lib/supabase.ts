@@ -4,6 +4,8 @@ const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
 export const supabaseConfigured = Boolean(url && key);
+/** The project URL (for building OAuth links by hand on iPhone, see lib/native.ts). */
+export const SUPABASE_URL = url ?? "";
 
 export const supabase = createClient(url || "http://localhost:54321", key || "missing", {
   auth: {
