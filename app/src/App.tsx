@@ -217,7 +217,6 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   function go(t: Tab) {
     setTab(t);
     closePages();
-    if (t !== "people" && detent === "peek") setDetent("mid");
   }
 
   const openAdding = () => (closePages(), setAdding(true), setDetent("full"));
