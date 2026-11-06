@@ -217,7 +217,6 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
   function go(t: Tab) {
     setTab(t);
     closePages();
-    if (t !== "people" && detent === "peek") setDetent("mid");
   }
 
   const openAdding = () => (closePages(), setAdding(true), setDetent("full"));
@@ -301,9 +300,9 @@ function Main({ me, now, invite, clearInvite }: { me: string; now: number; invit
     <div className="app">
       <MapView pins={[...pins, ...spotPins]} course={course} tools={features.mapTools ? tools : null} focus={focus} bottomPad={sheetPx}
         onPin={(id) => (id.startsWith("spot-") ? openPerson(id.slice(5)) : openRound(id))} />
-      <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
+      {detent !== "full" && <button className="map-locate" aria-label="Show everyone" style={{ bottom: sheetPx + 14 }} onClick={() => (setSelected(null), setRecenter((n) => n + 1))}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20.5 3.5 3.8 10.6c-.9.4-.8 1.7.2 1.9l6.6 1.2 1.3 6.6c.2 1 1.5 1.1 1.9.2L20.5 3.5z" /></svg>
-      </button>
+      </button>}
       {live && !pillInSheet && <SharingPill roundId={live.id} hole={live.hole} reload={data.reload} />}
       {!live && sharingWith.length > 0 && (
         <button className="loc-pill" onClick={() => go("me")}>
