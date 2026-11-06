@@ -77,6 +77,10 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Required by Apple because the location plugin contains (unused) "Always" code (ITMS-90683).
+	     v1 never requests Always: see lib/location.ts (requestAlways stays false) and features.test.ts. -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>FairWhere uses your location only during a round you start, to show your buddies which hole you're on. It stops when the round ends.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FairWhere uses your location during a round you choose to share, including with your phone in your pocket, to work out which hole you're on so friends can see your progress and finish time. Sharing stops when the round ends.</string>
 	<!-- HTTPS only (exempt): skips the export-compliance question on every upload. -->

@@ -10,7 +10,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Share } from "@capacitor/share";
-import { supabase } from "./supabase";
+import { SUPABASE_URL, supabase } from "./supabase";
 
 export const isNative = Capacitor.isNativePlatform();
 export const SCHEME = "fairwhere";
@@ -35,17 +35,38 @@ const hex = (b: ArrayBuffer | Uint8Array) => Array.from(new Uint8Array(b), (x) =
  * plain redirect.
  */
 export async function signInWithGoogle(): Promise<{ error: { message: string } | null }> {
-  const { data, error } = await supabase.auth.signInWithOAuth({
+  if (isNative) return oauthInBrowserSheet("google", { prompt: "select_account" });
+  const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: authRedirect(), skipBrowserRedirect: isNative, queryParams: { prompt: "select_account" } },
+    options: { redirectTo: authRedirect(), queryParams: { prompt: "select_account" } },
   });
-  if (error) return { error };
-  if (isNative && data?.url) await Browser.open({ url: data.url, presentationStyle: "popover" });
+  return { error };
+}
+
+/**
+ * iPhone OAuth (Google, Apple): Supabase's sign-in page in Safari's sheet, coming back to
+ * fairwhere://auth-callback with the session itself in the link (#access_token=…), which
+ * initDeepLinks hands to setSession. No PKCE code swap: on iPhone that step failed with
+ * "no valid flow state found" (Supabase logs, 2026-10-23) even though Google had signed in.
+ */
+async function oauthInBrowserSheet(provider: "google" | "apple", extra: Record<string, string> = {}) {
+  if (!SUPABASE_URL) return { error: { message: "Sign-in isn't set up" } };
+  const q = new URLSearchParams({ provider, redirect_to: AUTH_REDIRECT, ...extra });
+  await Browser.open({ url: `${SUPABASE_URL}/auth/v1/authorize?${q}`, presentationStyle: "popover" });
   return { error: null };
 }
 
-/** iPhone only. A cancelled sheet isn't an error. */
+/**
+ * Sign in with Apple. iPhone: Apple's web sign-in in Safari's sheet (the same flow Yard Sale
+ * Club ships), via a Services ID configured in Supabase. The native sheet below is kept for
+ * later: on this App ID Apple answered "Sign Up Not Completed" (App Review rejection, 2026-10-23).
+ */
 export async function signInWithApple(): Promise<{ error: { message: string } | null }> {
+  return oauthInBrowserSheet("apple");
+}
+
+/** Native Apple sheet (unused for now, see signInWithApple). A cancelled sheet isn't an error. */
+export async function signInWithAppleNative(): Promise<{ error: { message: string } | null }> {
   // A one-time value tying Apple's token to this request: Apple gets its hash, Supabase the original.
   const nonce = hex(crypto.getRandomValues(new Uint8Array(32)));
   const hashed = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(nonce)));
@@ -112,10 +133,17 @@ export function initDeepLinks(onInvite: (code: string) => void): void {
     if (invite) return onInvite(invite);
     if (!url.startsWith(AUTH_REDIRECT)) return;
     try {
-      const code = new URLSearchParams(url.split("?")[1] ?? "").get("code");
-      const { error } = code ? await supabase.auth.exchangeCodeForSession(code) : { error: new Error("no code") };
-      // An old or already-used email link: tell the sign-in screen (it offers the code instead).
-      if (error) window.dispatchEvent(new CustomEvent(AUTH_LINK_FAILED));
+      // Google / Apple come back with the session in the fragment; email links with ?code=.
+      const frag = new URLSearchParams(url.split("#")[1] ?? "");
+      const query = new URLSearchParams((url.split("?")[1] ?? "").split("#")[0]);
+      const access_token = frag.get("access_token"), refresh_token = frag.get("refresh_token");
+      const failure = frag.get("error_description") || query.get("error_description");
+      let error: { message: string } | null = null;
+      if (access_token && refresh_token) ({ error } = await supabase.auth.setSession({ access_token, refresh_token }));
+      else if (query.get("code")) ({ error } = await supabase.auth.exchangeCodeForSession(query.get("code")!));
+      else error = { message: failure || "no code" };
+      // Tell the sign-in screen (for email links it offers the code instead).
+      if (error) window.dispatchEvent(new CustomEvent(AUTH_LINK_FAILED, { detail: failure || error.message }));
     } finally {
       Browser.close().catch(() => {});
     }

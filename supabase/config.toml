@@ -40,9 +40,12 @@ token_refresh = 150
 # Native Sign in with Apple (app/ios/App/App/AppleSignInPlugin.swift): Supabase checks Apple's
 # identity token against the app's bundle ID. No secret needed (that's only for the web flow).
 [auth.external.apple]
+# Web flow (iPhone opens it in Safari's sheet, like Yard Sale Club): Services ID first, then the
+# bundle ID. Secret = ES256 JWT from scripts/asc/apple-client-secret.mjs (key Z5MYL83ZNJ in
+# ~/SaleMap/.apple), valid 6 months: EXPIRES 2027-04-21. Export it before any `config push`.
 enabled = true
-client_id = "com.sunnysimms.fairwhere"
-secret = ""
+client_id = "com.sunnysimms.fairwhere.signin,com.sunnysimms.fairwhere"
+secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 
 # Google sign-in (enabled in the dashboard 2026-10-08). The secret lives only in Supabase: export
 # SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET before any `supabase config push`, or don't push auth config.
