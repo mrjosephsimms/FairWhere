@@ -1,4 +1,4 @@
-# Publishes site/ (privacy, terms, support) to GitHub Pages: https://mrjosephsimms.github.io/FairWhere/
+# Publishes site/ (privacy, terms, support) to GitHub Pages: https://fairwhere.app/ (custom domain)
 name: Pages
 on:
   push:
