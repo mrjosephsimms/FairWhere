@@ -74,8 +74,8 @@ Done 2026-10-07 (PR "Push notifications for alerts"):
 - iPhone Simulator: "Turn on notifications" (Edit profile, or the card in a buddy's alert settings) → iOS prompt →
   token saved with its zone; a payload built by the sender's own code showed as a banner, and tapping it opened that
   round from another tab.
-- **Not yet end to end with Apple:** needs the APNs key set as Edge Function secrets (see NEXT_STEPS.md), then a real
-  alert from a buddy's round.
+- End to end with Apple (2026-11-06): APNs key set as Edge Function secrets; a real hole alert from a buddy's round
+  reached Sunny's iPhone (App Store build) about a second after the alert was written.
 
 ## 4. Accounts, safety, App Review requirements
 - [x] Native **Sign in with Apple** (team `8424XCN267`, bundle `com.sunnysimms.fairwhere`) plus the email/phone code. Google stays off unless Sunny asks.
@@ -93,9 +93,9 @@ Done 2026-10-07 (PR "App Review requirements"):
 - Native Sign in with Apple: `AppleSignInPlugin.swift` (no client secret to renew), Apple provider on in Supabase with
   the bundle ID; Google button removed (it was never configured). Built, **not yet tried**: needs a real iPhone or a
   Simulator signed in to an Apple ID.
-- Pages in `site/`, published by `.github/workflows/pages.yml` to https://mrjosephsimms.github.io/FairWhere/
-  (privacy, terms with Apple's zero-tolerance / 24 h report language, support). Contact is **mrjosephsimms@gmail.com**
-  for now (was support@fairwhere.app; switch back once the domain + email forwarding exist).
+- Pages in `site/`, published by `.github/workflows/pages.yml` to https://fairwhere.app/
+  (privacy, terms with Apple's zero-tolerance / 24 h report language, support). Contact is **support@fairwhere.app**
+  (forwards to Sunny's Gmail).
 - Checked in the Simulator: Me page (Delete account, links, credits) and the map credits. Report/Block and the
   sign-in screen weren't seen on screen (that test account has no buddies; signing out would need your code).
 

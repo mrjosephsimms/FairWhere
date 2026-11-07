@@ -47,9 +47,9 @@ Golf day, minus the "where are you?" texts. Your buddies see the hole you're on 
 
 **Keywords (100):** `golf,tracker,round,live,location,share,family,buddies,tee time,eta,pace,scorecard,friends,course` (97)
 
-**Support URL:** https://mrjosephsimms.github.io/FairWhere/support.html
-**Marketing URL:** https://mrjosephsimms.github.io/FairWhere/
-**Privacy policy URL:** https://mrjosephsimms.github.io/FairWhere/privacy.html
+**Support URL:** https://fairwhere.app/support.html
+**Marketing URL:** https://fairwhere.app/
+**Privacy policy URL:** https://fairwhere.app/privacy.html
 **Copyright:** 2026 Sunny Simms Inc.
 
 ## App Privacy ("nutrition label")
@@ -98,7 +98,7 @@ user-generated content = Yes), and all 10 screenshots (6.9" and 6.5"). Name set 
 
 Done by Sunny in the web UI (2026-10-09, verified via the API): age rating social-media questions = No; App Review
 Information (contact, phone, demo login `review@fairwhere.app` + password matching `.review_account`, notes above).
-Support email on the public pages is mrjosephsimms@gmail.com until fairwhere.app exists. **App Privacy** has no
+Support email on the public pages is support@fairwhere.app (since 2026-11-06). **App Privacy** has no
 API: confirm it shows Published before submitting.
 
 ## Screenshots

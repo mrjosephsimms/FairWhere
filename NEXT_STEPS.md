@@ -20,7 +20,8 @@ Read this first, then `CLAUDE.md` and `README.md`. Delete or update this file as
 - [x] Auth config pushed from `supabase/config.toml` (`supabase config push`): site URL `http://localhost:5180`,
       redirect URLs `fairwhere://auth-callback` + `http://localhost:5180` (+ `/**`), email OTP length 8 → 6.
 - [x] `app/.env` written (URL + `sb_publishable_…` key; gitignored, local to this Mac).
-- [x] Custom SMTP (Gmail app password, mrjosephsimms@gmail.com) set in the dashboard by Sunny; email rate limit 30/h.
+- [x] Custom SMTP: Resend (`smtp.resend.com:465`, user `resend`, send-only key restricted to `send.fairwhere.app`,
+      kept in gitignored `.resend_smtp_key`), from `FairWhere <signin@send.fairwhere.app>` (2026-11-06; was Gmail); email rate limit 30/h.
 - [x] Magic-link email with the 6-digit code pushed (`supabase/templates/magic_link.html`). Use the code when the
       email is opened on a different device than the one that asked for it (links only work in the same browser).
 - [x] Phone testing: redirect allow-list includes the Mac's Tailscale URL `http://100.111.147.89:5180/**`.
@@ -93,9 +94,9 @@ Before the first device build: Xcode → App target → Signing & Capabilities s
 - **Sign-in emails** go through Gmail SMTP, capped at 30/hour project-wide (Gmail allows ~500/day). Move to Resend
   (as Yard Sale Club did) before launch, then raise `[auth.rate_limit] email_sent`.
 
-- **Support email:** the privacy/terms/support pages use **mrjosephsimms@gmail.com** for now (2026-10-09). When
-  fairwhere.app exists, set up support@fairwhere.app (e.g. Cloudflare Email Routing → Gmail), swap it back in `site/*.html`,
-  and point the pages at the domain if you like (`site/`, `app/src/lib/native.ts` SITE).
+- **Support email:** support@fairwhere.app (Cloudflare Email Routing → Sunny's Gmail), used on the privacy/terms/support
+  pages since 2026-11-06. The site is served at https://fairwhere.app (GitHub Pages custom domain; the old
+  mrjosephsimms.github.io/FairWhere URLs redirect there).
 - **Reports** (Apple expects action within 24 h): Supabase dashboard → SQL editor:
   `select * from reports where resolved_at is null order by created_at;` then
   `update reports set resolved_at = now() where id = '...';` (and block / delete the account if needed).

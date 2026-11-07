@@ -237,5 +237,5 @@ export function openLink(url: string) {
 }
 
 /** Public pages (privacy, terms, support). Hosted from the repo's site/ folder (GitHub Pages) until fairwhere.app exists. */
-export const SITE = "https://mrjosephsimms.github.io/FairWhere";
+export const SITE = "https://fairwhere.app";
 export const LINKS = { privacy: `${SITE}/privacy.html`, terms: `${SITE}/terms.html`, support: `${SITE}/support.html` };
